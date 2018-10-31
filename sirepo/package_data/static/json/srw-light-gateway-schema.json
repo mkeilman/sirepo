@@ -1,0 +1,41 @@
+{
+    "dynamicFiles": {
+        "externalLibs": {
+            "js": []
+        },
+        "sirepoLibs": {
+            "js": [
+                "srw-light-gateway.js"
+            ],
+            "css": [
+                 "landing-page.css"
+            ]
+        }
+    },
+    "localRoutes": {
+        "gateway": {
+            "config": {
+                "controller": "SRWLightController as gateway",
+                "templateUrl": "/static/html/srw-source.html"
+            }
+        }
+    },
+    "appModes": {
+        "calculator": {
+            "localRoute": "source",
+            "includeMode": true
+        },
+        "wavefront": {
+            "localRoute": "beamline",
+            "includeMode": true
+        },
+        "light-sources": {
+            "localRoute": "beamline",
+            "includeMode": true
+        }
+    },
+    "model": {
+    },
+    "view": {
+    }
+}
