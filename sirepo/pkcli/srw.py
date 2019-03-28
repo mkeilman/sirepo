@@ -12,7 +12,7 @@ from pykern.pkdebug import pkdp, pkdc
 from sirepo import mpi
 from sirepo import simulation_db
 from sirepo.template import template_common
-from sirepo.template.srw import extract_report_data, get_filename_for_model
+from sirepo.template import srw
 import numpy as np
 
 
@@ -81,7 +81,7 @@ def _run_srw():
             'simulationId': sim_id,
         })
     else:
-        simulation_db.write_result(extract_report_data(get_filename_for_model(data['report']), data))
+        simulation_db.write_result(srw.extract_report_data(srw.get_filename_for_model(data['report']), data))
 
 
 def _cfg_int(lower, upper):

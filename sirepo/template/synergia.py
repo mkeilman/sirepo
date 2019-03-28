@@ -8,8 +8,8 @@ u"""Synergia execution template.
 from __future__ import absolute_import, division, print_function
 from pykern import pkio
 from pykern.pkdebug import pkdc, pkdp, pkdlog
+from sirepo import srschema
 from sirepo import simulation_db
-from sirepo.schema import get_enums
 from sirepo.template import template_common, elegant_common, elegant_lattice_importer
 import glob
 import h5py
@@ -396,7 +396,7 @@ def _build_beamline_map(data):
 def _calc_bunch_parameters(bunch):
     from synergia.foundation import Four_momentum
     bunch_def = bunch.beam_definition
-    bunch_enums = get_enums(_SCHEMA, 'BeamDefinition')
+    bunch_enums = srschema.get_enums(_SCHEMA, 'BeamDefinition')
     mom = Four_momentum(bunch.mass)
     _calc_particle_info(bunch)
     try:
@@ -422,7 +422,7 @@ def _calc_bunch_parameters(bunch):
 def _calc_particle_info(bunch):
     from synergia.foundation import pconstants
     particle = bunch.particle
-    particle_enums = get_enums(_SCHEMA, 'Particle')
+    particle_enums = srschema.get_enums(_SCHEMA, 'Particle')
     if particle == particle_enums.other:
         return
     mass = 0

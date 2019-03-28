@@ -7,10 +7,10 @@ u"""Simulation database
 from __future__ import absolute_import, division, print_function
 from pykern import pkcollections
 from pykern import pkconfig
+from pykern import pkdebug
 from pykern import pkinspect
 from pykern import pkio
 from pykern import pkresource
-from pykern.pkdebug import pkdc, pkdexc, pkdlog, pkdp
 from sirepo import cookie
 from sirepo import feature_config
 from sirepo import srschema
@@ -222,7 +222,7 @@ def fixup_old_data(data, force=False):
             elif 'bunchSource' in data.models:
                 data.simulationType = 'elegant'
             else:
-                pkdlog('simulationType: not found; data={}', data)
+                pkdebug.pkdlog('simulationType: not found; data={}', data)
                 raise AssertionError('must have simulationType')
         elif data.simulationType == 'warp':
             data.simulationType = 'warppba'
@@ -235,7 +235,7 @@ def fixup_old_data(data, force=False):
         pkcollections.unchecked_del(data, 'fixup_old_version')
         return data, True
     except Exception as e:
-        pkdlog('{}: error: {}', data, pkdexc())
+        pkdebug.pkdlog('{}: error: {}', data, pkdebug.pkdexc())
         raise
 
 
@@ -341,7 +341,7 @@ def iterate_simulation_datafiles(simulation_type, op, search=None):
                 continue
             op(res, path, data)
         except ValueError as e:
-            pkdlog('{}: error: {}', path, e)
+            pkdebug.pkdlog('{}: error: {}', path, e)
     return res
 
 
@@ -409,7 +409,7 @@ def move_user_simulations(to_uid):
                 continue
             dir_path = os.path.dirname(path)
             new_dir_path = dir_path.replace(from_uid, to_uid)
-            pkdlog('{} -> {}', dir_path, new_dir_path)
+            pkdebug.pkdlog('{} -> {}', dir_path, new_dir_path)
             pkio.mkdir_parent(new_dir_path)
             os.rename(dir_path, new_dir_path)
 
@@ -459,7 +459,7 @@ def open_json_file(sim_type, path=None, sid=None, fixup=True):
             if sid:
                 data['models']['simulation']['simulationId'] = _sid_from_path(path)
     except Exception as e:
-        pkdlog('{}: error: {}', path, pkdexc())
+        pkdebug.pkdlog('{}: error: {}', path, pkdebug.pkdexc())
         raise
     return fixup_old_data(data)[0] if fixup else data
 
@@ -591,8 +591,8 @@ def read_result(run_dir):
     try:
         res = read_json(fn)
     except Exception as e:
-        pkdc('{}: exception={}', fn, e)
-        err = pkdexc()
+        pkdebug.pkdc('{}: exception={}', fn, e)
+        err = pkdebug.pkdexc()
         if pkio.exception_is_not_found(e):
             #TODO(robnagler) change POSIT matches _SUBPROCESS_ERROR_RE
             err = 'ERROR: Terminated unexpectedly'
@@ -606,9 +606,9 @@ def read_result(run_dir):
                     err = e
             except Exception as e:
                 if not pkio.exception_is_not_found(e):
-                    pkdlog('{}: error reading log: {}', rl, pkdexc())
+                    pkdebug.pkdlog('{}: error reading log: {}', rl, pkdebug.pkdexc())
         else:
-            pkdlog('{}: error reading output: {}', fn, err)
+            pkdebug.pkdlog('{}: error reading output: {}', fn, err)
     if err:
         return None, err
     if not res:
@@ -687,9 +687,9 @@ def report_info(data):
             return rep
         rep.parameters_changed = True
     except IOError as e:
-        pkdlog('{}: ignore IOError: {} errno={}', rep.run_dir, e, e.errno)
+        pkdebug.pkdlog('{}: ignore IOError: {} errno={}', rep.run_dir, e, e.errno)
     except Exception as e:
-        pkdlog('{}: ignore other error: {}', rep.run_dir, e)
+        pkdebug.pkdlog('{}: ignore other error: {}', rep.run_dir, e)
         # No idea if cache is valid or not so throw away
     return rep
 
@@ -889,7 +889,7 @@ def validate_serial(req_data):
             if req_ser == curr_ser:
                 return None
             status = 'newer' if req_ser > curr_ser else 'older'
-            pkdlog(
+            pkdebug.pkdlog(
                 '{}: incoming serial {} than stored serial={} sid={}, resetting client',
                 req_ser,
                 status,
