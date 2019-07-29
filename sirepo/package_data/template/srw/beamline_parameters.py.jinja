@@ -47,13 +47,13 @@
 {% elif item.type == 'sample' %}
     {{- fields(item, 's', ('imageFile', 'outputImageFormat')) }}
     {{- fields(item, 'f', ('position', 'resolution', 'thickness', 'refractiveIndex', 'attenuationLength', 'horizontalCenterCoordinate', 'verticalCenterCoordinate', 'rotateAngle', 'cutoffBackgroundNoise')) }}
-    {{- fields(item, 'i', ('cropArea', 'areaXStart', 'areaXEnd', 'areaYStart', 'areaYEnd', 'rotateReshape', 'backgroundColor', 'tileImage', 'tileRows', 'tileColumns', 'shiftX', 'shiftY', 'invert')) }}
+    {{- fields(item, 'i', ('cropArea', 'transmissionImage', 'areaXStart', 'areaXEnd', 'areaYStart', 'areaYEnd', 'rotateReshape', 'backgroundColor', 'tileImage', 'tileRows', 'tileColumns', 'shiftX', 'shiftY', 'invert')) }}
 {% elif item.type == 'sphericalMirror' %}
     {{- fields(item, 's', ('heightProfileFile', 'orientation')) }}
     {{- fields(item, 'f', ('radius', 'tangentialSize', 'sagittalSize', 'grazingAngle', 'normalVectorX', 'normalVectorY', 'normalVectorZ', 'tangentialVectorX', 'tangentialVectorY', 'heightAmplification', 'horizontalOffset', 'verticalOffset')) }}
 {% elif item.type == 'toroidalMirror' %}
-    {{- fields(item, 's', ('heightProfileFile', 'orientation')) }}
-    {{- fields(item, 'f', ('tangentialRadius', 'sagittalRadius', 'tangentialSize', 'sagittalSize', 'horizontalPosition', 'verticalPosition', 'apertureShape', 'normalVectorX', 'normalVectorY', 'normalVectorZ', 'tangentialVectorX', 'tangentialVectorY')) }}
+    {{- fields(item, 's', ('heightProfileFile', 'orientation', 'apertureShape')) }}
+    {{- fields(item, 'f', ('tangentialRadius', 'sagittalRadius', 'tangentialSize', 'sagittalSize', 'grazingAngle', 'horizontalPosition', 'verticalPosition', 'normalVectorX', 'normalVectorY', 'normalVectorZ', 'tangentialVectorX', 'tangentialVectorY', 'heightAmplification')) }}
 {% elif item.type == 'zonePlate' %}
     {{- fields(item, 'f', ('outerRadius', 'thickness', 'mainRefractiveIndex', 'mainAttenuationLength', 'complementaryRefractiveIndex', 'complementaryAttenuationLength', 'horizontalOffset', 'verticalOffset')) }}
     {{- fields(item, 'i', ('numberOfZones', )) }}

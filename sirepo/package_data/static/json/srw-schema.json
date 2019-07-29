@@ -76,10 +76,6 @@
             ["t", "Twiss"],
             ["m", "Moments"]
         ],
-        "Boolean": [
-            ["0", "No"],
-            ["1", "Yes"]
-        ],
         "BrightnessComponent": [
             ["k-tuning", "K Tuning"],
             ["spectral-detuning", "Spectral Detuning"]
@@ -129,6 +125,12 @@
             ["Silicon (X0h)", "Silicon (X0h server)"],
             ["Germanium (X0h)", "Germanium (X0h server)"],
             ["Diamond (X0h)", "Diamond (X0h server)"]
+        ],
+        "DiffractionPlaneAngle": [
+            ["-1.57079632", "-𝛑/2 (horizontal, right)"],
+            ["0", "0 (vertical, up)"],
+            ["1.57079632", "𝛑/2 (horizontal, left)"],
+            ["3.14159265", "𝛑 (vertical, down)"]
         ],
         "DriftCalculationMethod": [
             ["auto", "Automatic"],
@@ -287,6 +289,7 @@
             ["u", "Electron Beam with Idealized Undulator"],
             ["t", "Electron Beam with Tabulated Undulator"],
             ["m", "Electron Beam with Dipole"],
+            ["a", "Electron Beam with Arbitrary Magnetic Field"],
             ["g", "Coherent Gaussian Beam"]
         ],
         "StokesParameter": [
@@ -322,6 +325,10 @@
             ["BetaZ", "Longitudinal Beta"],
             ["None", "None"]
         ],
+        "TransmissionImage": [
+            ["0", "Zero"],
+            ["1", "Same as on Image Boundary"]
+        ],
         "UndulatorType": [
             ["u_i", "Idealized"],
             ["u_t", "Tabulated"]
@@ -349,6 +356,18 @@
             "harmonic": ["Harmonic", "HarmonicList", "5"],
             "notes": ["Notes", "Text", ""]
         },
+        "coherenceXAnimation": {
+            "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
+            "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
+            "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"]
+        },
+        "coherenceYAnimation": {
+            "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
+            "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
+            "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"]
+        },
         "crl": {
             "title": ["Element Name", "String", "CRL"],
             "position": ["Nominal Position [m]", "Float"],
@@ -373,12 +392,13 @@
         "crystal": {
             "title": ["Element Name", "String", "Crystal"],
             "position": ["Nominal Position [m]", "Float"],
-            "material": ["", "CrystalMaterial", "Unknown"],
+            "material": ["Material", "CrystalMaterial", "Unknown"],
             "h": ["h", "MillerIndicesRange", "1"],
             "k": ["k", "MillerIndicesRange", "1"],
             "l": ["l", "MillerIndicesRange", "1"],
             "energy": ["Average photon energy the crystal should be oriented for [eV]", "Float", 9000],
-            "grazingAngle": ["Diffraction plane angle [rad]", "Float", 1.5707963],
+            "diffractionAngle": ["Diffraction plane angle [rad]", "DiffractionPlaneAngle", "0"],
+            "grazingAngle": ["Grazing Angle [mrad]", "Float", 0.0],
             "asymmetryAngle": ["Asymmetry angle [rad]", "Float", 0.0],
             "rotationAngle": ["Rotation angle [rad]", "Float", 0.0],
             "crystalThickness": ["Crystal thickness [m]", "Float", 0.01],
@@ -399,7 +419,7 @@
             "heightAmplification": ["Height Amplification Coefficient", "Float", 1]
         },
         "electronBeam": {
-            "beamSelector": ["Select Beam", "BeamList"],
+            "beamSelector": ["Existing Beam", "BeamList"],
             "name": ["Beam Name", "String"],
             "energy": ["Energy [GeV]", "Float"],
             "current": ["Current [A]", "Float"],
@@ -440,11 +460,11 @@
             "sagittalSize": ["Sagittal Size [m]", "Float", 0.01],
             "grazingAngle": ["Grazing Angle [mrad]", "Float", 3.6],
             "autocomputeVectors": ["Auto-compute Vectors", "AutocomputeVectors", "horizontal"],
-            "normalVectorX": ["Horizontal", "Float", 0],
-            "normalVectorY": ["Vertical", "Float", 0.9999935200069984],
+            "normalVectorX": ["Horizontal", "Float", 0.9999935200069984],
+            "normalVectorY": ["Vertical", "Float", 0],
             "normalVectorZ": ["Longitudinal", "Float", -0.0035999922240050387],
-            "tangentialVectorX": ["Horizontal", "Float", 0],
-            "tangentialVectorY": ["Vertical", "Float", -0.0035999922240050387],
+            "tangentialVectorX": ["Horizontal", "Float", -0.0035999922240050387],
+            "tangentialVectorY": ["Vertical", "Float", 0],
             "heightProfileFile": ["Height Profile Data File", "MirrorFile", ""],
             "orientation": ["Orientation of Reflection Plane", "MirrorOrientation", "x"],
             "heightAmplification": ["Height Amplification Coefficient", "Float", 1],
@@ -532,11 +552,11 @@
             "sagittalSize": ["Sagittal Size [m]", "Float", 0.015],
             "grazingAngle": ["Grazing Angle [mrad]", "Float", 12.9555790185373],
             "autocomputeVectors": ["Auto-compute Vectors", "AutocomputeVectors", "horizontal"],
-            "normalVectorX": ["Horizontal", "Float", 0],
-            "normalVectorY": ["Vertical", "Float", 0.99991607766],
+            "normalVectorX": ["Horizontal", "Float", 0.99991607766],
+            "normalVectorY": ["Vertical", "Float", 0],
             "normalVectorZ": ["Longitudinal", "Float", -0.0129552166147],
-            "tangentialVectorX": ["Horizontal", "Float", 0],
-            "tangentialVectorY": ["Vertical", "Float", 0.0129552166147],
+            "tangentialVectorX": ["Horizontal", "Float", 0.0129552166147],
+            "tangentialVectorY": ["Vertical", "Float", 0],
             "diffractionOrder": ["Diffraction Order", "Float", 1],
             "grooveDensity0": ["a₀ [lines/mm]", "Float", 1800],
             "grooveDensity1": ["a₁ [lines/mm²]", "Float", 0.08997],
@@ -554,6 +574,7 @@
             "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
             "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
             "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"],
             "notes": ["Notes", "Text", ""]
         },
         "intensityReport": {
@@ -624,8 +645,10 @@
             "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
             "photonEnergyBandWidth": ["Photon Energy Band Width [eV]", "Float", 0],
             "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"],
             "notes": ["Notes", "Text", ""],
-            "watchpointId": ["Evaluate at Watchpoint", "WatchPoint", 0]
+            "watchpointId": ["Evaluate at Watchpoint", "WatchPoint", 0],
+            "calcCoherence": ["Calculate Degree of Coherence in addition to Intensity", "Boolean", "0"]
         },
         "multipole": {
             "field": ["Magnetic Field [T]", "Float"],
@@ -648,12 +671,14 @@
             "verticalPosition": ["Vertical Center Position [mm]", "Float"],
             "verticalRange": ["Range of Vertical Position [mm]", "Float"],
             "precision": ["Relative Precision", "Float"],
+            "magneticField": ["Magnetic Field Treatment", "MagneticField"],
             "method": ["Power Density Computation Method", "PowerDensityMethod"],
             "horizontalPointCount": ["Number of Points vs Horizontal Position", "Integer", 100],
             "verticalPointCount": ["Number of Points vs Vertical Position", "Integer", 100],
             "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
             "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
             "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"],
             "notes": ["Notes", "Text", ""]
         },
         "propagationParameters": {
@@ -696,6 +721,7 @@
             "tileImage": ["Tile Sample?", "Boolean", "0", "Tile the cut area of the image with the provided number of rows and columns"],
             "tileRows": ["Number of Rows", "Integer", 1],
             "tileColumns": ["Number of Columns", "Integer", 1],
+            "transmissionImage": ["Transmission Outside Image", "TransmissionImage", "1"],
             "shiftX": ["Horizontal Shift [pixels]", "Integer", 0],
             "shiftY": ["Vertical Shift [pixels]", "Integer", 0],
             "invert": ["Invert Image Colors", "Boolean", "0"],
@@ -726,6 +752,9 @@
             "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
             "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
             "magneticField": ["Magnetic Field Treatment", "MagneticField"],
+            "method": ["Single-Electron Spectrum Computation Method", "IntensityMethod"],
+	    "initialPosition": ["Initial Longitudinal Position for SR Calculation (effective if smaller than final position)", "Float", 0.0],
+	    "finalPosition": ["Final Longitudinal Position for SR Calculation (effective if larger than initial position)", "Float", 0.0],
             "photonEnergy": ["Photon Energy [eV]", "Float"],
             "polarization": ["Polarization Component to Extract", "Polarization"],
             "precision": ["Relative Precision", "Float", 0.01],
@@ -735,6 +764,7 @@
             "verticalPosition": ["Vertical Center Position [mm]", "Float"],
             "verticalRange": ["Range of Vertical Position [mm]", "Float"],
             "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"],
             "notes": ["Notes", "Text", ""]
         },
         "sphericalMirror": {
@@ -745,11 +775,11 @@
             "sagittalSize": ["Sagittal Size [m]", "Float", 0.11],
             "grazingAngle": ["Grazing Angle [mrad]", "Float", 3.1415926],
             "autocomputeVectors": ["Auto-compute Vectors", "AutocomputeVectors", "horizontal"],
-            "normalVectorX": ["Horizontal", "Float", 0],
-            "normalVectorY": ["Vertical", "Float", 0.9999025244842406],
+            "normalVectorX": ["Horizontal", "Float", 0.9999025244842406],
+            "normalVectorY": ["Vertical", "Float", 0],
             "normalVectorZ": ["Longitudinal", "Float", -0.013962146326506367],
-            "tangentialVectorX": ["Horizontal", "Float", 0],
-            "tangentialVectorY": ["Vertical", "Float", 0.013962146326506367],
+            "tangentialVectorX": ["Horizontal", "Float", 0.013962146326506367],
+            "tangentialVectorY": ["Vertical", "Float", 0],
             "heightProfileFile": ["Height Profile Data File", "MirrorFile", ""],
             "orientation": ["Orientation of Reflection Plane", "MirrorOrientation", "x"],
             "heightAmplification": ["Height Amplification Coefficient", "Float", 1],
@@ -757,7 +787,7 @@
             "verticalOffset": ["Vertical Center Position [mm]", "Float", 0]
         },
         "tabulatedUndulator": {
-            "undulatorSelector": ["Select Undulator", "UndulatorList"],
+            "undulatorSelector": ["Existing Undulator", "UndulatorList"],
             "name": ["Undulator Name", "String"],
             "undulatorType": ["Type of Undulator", "UndulatorType", "u_t"],
             "gap": ["Magnetic Gap [mm]", "Float", 6.72],
@@ -776,11 +806,11 @@
             "apertureShape": ["Shape of Aperture", "ApertureShapeToroidalMirror", "r"],
             "grazingAngle": ["Grazing Angle [mrad]", "Float", 7],
             "autocomputeVectors": ["Auto-compute Vectors", "AutocomputeVectors", "horizontal"],
-            "normalVectorX": ["Horizontal", "Float", 0],
-            "normalVectorY": ["Vertical", "Float", 0.9999755001000415],
+            "normalVectorX": ["Horizontal", "Float", 0.9999755001000415],
+            "normalVectorY": ["Vertical", "Float", 0],
             "normalVectorZ": ["Longitudinal", "Float", -0.006999942833473391],
-            "tangentialVectorX": ["Horizontal", "Float", 0],
-            "tangentialVectorY": ["Vertical", "Float", 0.006999942833473391],
+            "tangentialVectorX": ["Horizontal", "Float", 0.006999942833473391],
+            "tangentialVectorY": ["Vertical", "Float", 0],
             "heightProfileFile": ["Height Profile Data File", "MirrorFile", ""],
             "orientation": ["Orientation of Reflection Plane", "MirrorOrientation", "x"],
             "heightAmplification": ["Height Amplification Coefficient", "Float", 1]
@@ -811,6 +841,11 @@
             "horizontalDeflectingParameter": ["Horizontal Deflecting Parameter (K)", "Float"],
             "verticalDeflectingParameter": ["Vertical Deflecting Parameter (K)", "Float"]
         },
+        "arbitraryMagField": {
+            "interpolationOrder": ["Interpolation Order", "Float", 1],
+            "longitudinalPosition": ["Longitudinal Central Position [m]", "Float", 0],
+            "magneticFile": ["Magnetic Data File", "ArbitraryFieldFile", "ivu21_srx_g6_2c.dat"]
+        },
         "watch": {
             "title": ["Element Name", "SafePath", "Watchpoint"],
             "position": ["Nominal Position [m]", "Float"]
@@ -822,6 +857,7 @@
             "intensityPlotsWidth": ["Maximum Plot Dimension [pixels]", "IntensityPlotsWidth", "0"],
             "intensityPlotsScale": ["Plot Scale", "IntensityPlotsScale", "linear"],
             "colorMap": ["Color Map", "ColorMap", "grayscale"],
+            "aspectRatio": ["Aspect Ratio", "AspectRatio", "1"],
             "notes": ["Notes", "Text", ""]
         },
         "zonePlate": {
@@ -842,6 +878,15 @@
         }
     },
     "view": {
+        "arbitraryMagField": {
+            "title": "Arbitrary Magnetic Field",
+	    "basic": [],
+            "advanced": [
+                "longitudinalPosition",
+                "magneticFile",
+                "interpolationOrder"
+            ]
+        },
         "aperture": {
             "title": "Aperture",
             "basic": [],
@@ -862,7 +907,7 @@
             ]
         },
         "brillianceReport": {
-            "title": "Brightness Report",
+            "title": "Brightness",
             "basic": [],
             "advanced": [
                 "brightnessComponent",
@@ -875,6 +920,34 @@
                 "energyPointCount",
                 "reportType",
                 "notes"
+            ]
+        },
+        "coherenceXAnimation": {
+            "title": "Degree of Coherence vs. X",
+            "basic": [],
+            "advanced": [
+                ["Scale", [
+                    "intensityPlotsWidth",
+                    "intensityPlotsScale"
+                ]],
+                ["Other", [
+                    "colorMap",
+                    "aspectRatio"
+                ]]
+            ]
+        },
+        "coherenceYAnimation": {
+            "title": "Degree of Coherence vs. Y",
+            "basic": [],
+            "advanced": [
+                ["Scale", [
+                    "intensityPlotsWidth",
+                    "intensityPlotsScale"
+                ]],
+                ["Other", [
+                    "colorMap",
+                    "aspectRatio"
+                ]]
             ]
         },
         "crl": {
@@ -932,7 +1005,7 @@
                 ]],
                 ["Geometry", [
                     "energy",
-                    "grazingAngle",
+                    "diffractionAngle",
                     "asymmetryAngle",
                     "rotationAngle",
                     "crystalThickness",
@@ -1174,7 +1247,8 @@
         },
         "gaussianBeam": {
             "title": "Coherent Gaussian Beam",
-            "basic": [
+	    "basic": [],
+            "advanced": [
                 "photonEnergy",
                 "energyPerPulse",
                 "polarization",
@@ -1195,8 +1269,7 @@
                         "waistAngleY"
                     ]]
                 ]
-            ],
-            "advanced": []
+            ]
         },
         "grating": {
             "title": "Grating",
@@ -1233,7 +1306,7 @@
                     ]
                 ]],
                 ["Groove Parameters", [
-                    "*Groove Density Polynomial:\na₀ + a₁y + a₂y² + a₃y³ + a₄y⁴",
+                    "*Groove Density Polynomial:\n$a_0 + a_1 y + a_2 y^2 + a_3 y^3 + a_4 y^4$",
                     "grooveDensity0",
                     "grooveDensity1",
                     "grooveDensity2",
@@ -1243,7 +1316,7 @@
             ]
         },
         "initialIntensityReport": {
-            "title": "Initial Intensity Report",
+            "title": "Initial Intensity",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1259,12 +1332,13 @@
                     "intensityPlotsScale"
                 ]],
                 ["Other", [
-                    "colorMap"
+                    "colorMap",
+                    "aspectRatio"
                 ]]
             ]
         },
         "intensityReport": {
-            "title": "Single-Electron Spectrum Report",
+            "title": "Single-Electron Spectrum",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1367,15 +1441,15 @@
         },
         "multipole": {
             "title": "Dipole",
-            "basic": [
+	    "basic": [],
+            "advanced": [
                 "field",
                 "length",
-                "distribution"
-            ],
-            "advanced": []
+		"distribution"
+            ]
         },
         "multiElectronAnimation": {
-            "title": "Partially Coherent Intensity Report",
+            "title": "Partially Coherent Intensity",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1385,6 +1459,7 @@
                     "numberOfMacroElectrons",
                     "integrationMethod",
                     "photonEnergyBandWidth",
+                    "calcCoherence",
                     "notes"
                 ]],
                 ["Scale", [
@@ -1392,7 +1467,8 @@
                     "intensityPlotsScale"
                 ]],
                 ["Other", [
-                    "colorMap"
+                    "colorMap",
+                    "aspectRatio"
                 ]]
             ]
         },
@@ -1416,7 +1492,7 @@
             ]
         },
         "powerDensityReport": {
-            "title": "Power Density Report",
+            "title": "Power Density",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1444,7 +1520,8 @@
                     "intensityPlotsScale"
                 ]],
                 ["Other", [
-                    "colorMap"
+                    "colorMap",
+                    "aspectRatio"
                 ]]
             ]
         },
@@ -1465,6 +1542,7 @@
                     "tileRows",
                     "tileColumns",
                     "cropArea",
+		    "transmissionImage",
                     [
                         ["Horizontal", [
                             "areaXStart",
@@ -1477,7 +1555,7 @@
                             "shiftY"
                         ]]
                     ],
-                    "outputImageFormat"
+		    "outputImageFormat"
                 ]],
                 ["Physical Properties", [
                     "resolution",
@@ -1533,7 +1611,7 @@
             "advanced": []
         },
         "sourceIntensityReport": {
-            "title": "Intensity Report",
+            "title": "Intensity",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1559,15 +1637,18 @@
                     "notes"
                 ]],
                 ["Accuracy", [
-                    "magneticField",
-                    "precision"
+                    "method",
+                    "precision",
+                    "initialPosition",
+                    "finalPosition"
                 ]],
                 ["Scale", [
                     "intensityPlotsWidth",
                     "intensityPlotsScale"
                 ]],
                 ["Other", [
-                    "colorMap"
+                    "colorMap",
+                    "aspectRatio"
                 ]]
             ]
         },
@@ -1614,10 +1695,13 @@
         },
         "tabulatedUndulator": {
             "title": "Undulator (Idealized or Tabulated)",
-            "basic": [
+	    "basic": [
+	        "name"
+	        ],
+            "advanced": [
                 "undulatorSelector",
                 "name",
-                "undulatorType",
+		"undulatorType",
                 "gap",
                 "phase",
                 "undulator.period",
@@ -1639,8 +1723,7 @@
                         "undulator.verticalSymmetry"
                     ]]
                 ]
-            ],
-            "advanced": []
+            ]
         },
         "toroidalMirror": {
             "title": "Toroid Mirror",
@@ -1692,7 +1775,7 @@
             ]
         },
         "trajectoryReport": {
-            "title": "Electron Trajectory Report",
+            "title": "Electron Trajectory",
             "basic": [],
             "advanced": [
                 "timeMomentEstimation",
@@ -1713,7 +1796,8 @@
         },
         "undulator": {
             "title": "Idealized Undulator",
-            "basic": [
+	    "basic": [],
+            "advanced": [
                 "period",
                 "length",
                 "longitudinalPosition",
@@ -1732,8 +1816,7 @@
                         "verticalSymmetry"
                     ]]
                 ]
-            ],
-            "advanced": []
+            ]
         },
         "watch": {
             "title": "Watchpoint",
@@ -1744,7 +1827,7 @@
             ]
         },
         "watchpointReport": {
-            "title": "Watchpoint Report",
+            "title": "Watchpoint",
             "basic": [],
             "advanced": [
                 ["Main", [
@@ -1759,7 +1842,8 @@
                     "intensityPlotsScale"
                 ]],
                 ["Other", [
-                    "colorMap"
+                    "colorMap",
+                    "aspectRatio"
                 ]]
             ]
         },
