@@ -3804,6 +3804,120 @@ SIREPO.app.directive('particle3d', function(appState, errorService, frameCache, 
                 return arr;
             }
 
+            function homunculus(bodyCenter) {
+
+                bodyCenter = bodyCenter || [0, 0, 0];
+                const thetaRez = 24;
+                const phiRez = 24;
+                const bodyRadius = 1.0;
+                const bodyHeight = 3 * bodyRadius;
+
+                let source = vtk.Filters.General.vtkAppendPolyData.newInstance();
+
+                // plane names
+                const VENTRAL = SIREPO.APP_SCHEMA.constants.planeVentral;
+                const DORSAL = SIREPO.APP_SCHEMA.constants.planeDorsal;
+                const DEXTER = SIREPO.APP_SCHEMA.constants.planeDexter;
+                const SINISTER = SIREPO.APP_SCHEMA.constants.planeSinister;
+                const ROSTRAL = SIREPO.APP_SCHEMA.constants.planeRostral;
+                const CAUDAL = SIREPO.APP_SCHEMA.constants.planeCaudal;
+
+                const quadrantColors = {};
+                quadrantColors[VENTRAL + DEXTER] = [0, 255, 0, 255];
+                quadrantColors[VENTRAL + SINISTER] = [255, 0, 0, 255];
+                quadrantColors[DORSAL + DEXTER] = [0, 0, 255, 255];
+                quadrantColors[DORSAL + SINISTER] = [255, 255, 0, 255];
+
+                const extentPlanes = {};
+                extentPlanes[ROSTRAL] = {norm: [0, 0, -1], origin: [0, 0, bodyHeight / 2.0]};
+                extentPlanes[CAUDAL] = {norm: [0, 0, 1], origin: [0, 0, -bodyHeight / 2.0]};
+
+                const quadrantPlanes = {};
+                quadrantPlanes[VENTRAL] = {norm: [0, 1, 0], origin: bodyCenter};
+                quadrantPlanes[DEXTER] = {norm: [1, 0, 0], origin: bodyCenter};
+                quadrantPlanes[DORSAL] = {norm: [0, -1, 0], origin: bodyCenter};
+                quadrantPlanes[SINISTER] = {norm: [-1, 0, 0], origin: bodyCenter};
+
+                const headRadius = 0.70 * bodyRadius;
+                var headCenter = [bodyCenter[0], bodyCenter[1], bodyCenter[2] + bodyHeight / 2.0 + 0.9 * headRadius];
+                const headQuadrants = {};
+                headQuadrants[VENTRAL + DEXTER] = {th1: 0, th2: 90};
+                headQuadrants[VENTRAL + SINISTER] = {th1: 90, th2: 180};
+                headQuadrants[DORSAL + DEXTER] = {th1: 270, th2: 360};
+                headQuadrants[DORSAL + SINISTER] = {th1: 180, th2: 270};
+
+                let n = 0;
+                [VENTRAL, DORSAL].forEach(function (vd) {
+                    [SINISTER, DEXTER].forEach(function (sd) {
+                        const qc = quadrantColors[vd + sd];
+                        let s = vtkPlotting.cylinderSection(
+                            bodyCenter, [0, 0 , 1], bodyRadius, bodyHeight,
+                            [extentPlanes[ROSTRAL], extentPlanes[CAUDAL], quadrantPlanes[vd], quadrantPlanes[sd]]
+                        ).getOutputData();
+                        vtkPlotting.setColorSclars(s, qc);
+                        if (n === 0) {
+                            source.setInputData(s);
+                        }
+                        else {
+                            source.addInputData(s);
+                        }
+                        ++n;
+                        const hq = headQuadrants[vd + sd];
+                        s = vtk.Filters.Sources.vtkSphereSource.newInstance({
+                            radius: headRadius,
+                            center: headCenter,
+                            thetaResolution: thetaRez,
+                            phiResolution: phiRez,
+                            startTheta: hq.th1,
+                            endTheta: hq.th2
+                        }).getOutputData();
+                        vtkPlotting.setColorSclars(s, qc);
+                        source.addInputData(s);
+                        ++n;
+                    });
+                });
+
+                const limbRadius = bodyRadius / 6.0;
+                const limbGeom = {};
+                limbGeom[ROSTRAL] = {
+                    length: 0.5 * bodyHeight,
+                    angle: -Math.PI / 3.0,
+                    zPos: 0.50 * bodyHeight,
+                };
+                limbGeom[CAUDAL] = {
+                    length: 0.75 * bodyHeight,
+                    angle: Math.PI / 12.0,
+                    zPos: -0.75 * bodyHeight,
+                };
+
+                [ROSTRAL, CAUDAL].forEach(function (rc, rcIdx) {
+                    let len = limbGeom[rc].length;
+                    let th = limbGeom[rc].angle;
+                    let rcDir = 2 * rcIdx - 1;
+                    let offset = Math.hypot(len / 2.0, limbRadius) *
+                        Math.sin(th + Math.sign(th) * Math.atan2(limbRadius, len / 2.0)) -
+                        Math.sign(th) * 2 * limbRadius * Math.cos(th) +
+                        rcDir * bodyRadius;
+                    [VENTRAL, DORSAL].forEach(function (vd) {
+                        [SINISTER, DEXTER].forEach(function (sd, sdIdx) {
+                            let sdDir = 2 * sdIdx - 1;
+                            let s = vtkPlotting.cylinderSection(
+                               [rcDir * sdDir * offset, 0, limbGeom[rc].zPos],
+                                [-sdDir * Math.sin(th), 0, Math.cos(th)],
+                                limbRadius,
+                                len,
+                                [extentPlanes[ROSTRAL], extentPlanes[CAUDAL], quadrantPlanes[vd]]
+                            ).getOutputData();
+                            vtkPlotting.setColorSclars(s, quadrantColors[vd + sd]);
+                            source.addInputData(s);
+                            ++n;
+                        });
+                    });
+                });
+
+                return source;
+            }
+
             var cFactor = 1000000.0;
             function scaleWithShave(a) {
                 var shave = 0.01;
@@ -3935,8 +4049,9 @@ SIREPO.app.directive('particle3d', function(appState, errorService, frameCache, 
 
                 // a little widget that mirrors the orientation (not the scale) of the scence
                 var axesActor = vtk.Rendering.Core.vtkAxesActor.newInstance();
+                const ha =  coordMapper.buildFromSource(homunculus()).actor;
                 orientationMarker = vtk.Interaction.Widgets.vtkOrientationMarkerWidget.newInstance({
-                    actor: axesActor,
+                    actor: ha, //axesActor,
                     interactor: renderWindow.getInteractor()
                 });
                 orientationMarker.setEnabled(true);
