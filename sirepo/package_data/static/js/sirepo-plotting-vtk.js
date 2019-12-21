@@ -231,7 +231,10 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
         }
     };
 
-    self.cylinderSection = function(center, axis, radius, height, planes) {
+    self.cylinderSection = function(
+        center, axis, radius, height,
+        plane1Norm, plane2Norm, plane1Origin, plane2Origin
+    ) {
         const startAxis = [0, 0, 1];
         const startOrigin = [0, 0, 0];
         const cylBounds = [-radius, radius, -radius, radius, -height/2.0, height/2.0];
@@ -241,17 +244,42 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
             axis: startAxis
         });
 
-        const pl = planes.map(function (p) {
-            return vtk.Common.DataModel.vtkPlane.newInstance({
-                normal: p.norm || startAxis,
-                origin: p.origin || startOrigin
-            });
-        });
+        if (! plane1Norm && ! plane2Norm) {
+            return null;
+        }
+
+        let planes = [
+            vtk.Common.DataModel.vtkPlane.newInstance({
+                normal: [-startAxis[0], -startAxis[1], -startAxis[2]],
+                origin: [0, 0, height / 2.0]
+            }),
+            vtk.Common.DataModel.vtkPlane.newInstance({
+                normal: [...startAxis],
+                origin: [0, 0, -height / 2.0]
+            })
+        ];
+
+        if (plane1Norm) {
+            planes.push(
+                vtk.Common.DataModel.vtkPlane.newInstance({
+                    normal: plane1Norm,
+                    origin: plane1Origin || startOrigin
+                })
+            );
+        }
+        if (plane2Norm) {
+            planes.push(
+                vtk.Common.DataModel.vtkPlane.newInstance({
+                    normal: plane2Norm,
+                    origin: plane2Origin || startOrigin
+                })
+            );
+        }
 
         // perform the sectioning
         const section = vtk.Common.DataModel.vtkImplicitBoolean.newInstance({
             operation: 'Intersection',
-            functions: [cyl, ...pl]
+            functions: [cyl, ...planes]
         });
 
         const sectionSample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
@@ -262,12 +290,13 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
 
         const sectionSource = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
         sectionSource.setInputConnection(sectionSample.getOutputPort());
-        // this transformation adapted from VTK cylinder source - we don't "untranslate" because we want to
-        // rotate in place, not around the global origin
+        // this transformation adapted from VTK cylinder source
         vtk.Common.Core.vtkMatrixBuilder
             .buildFromRadian()
+            //.rotateFromDirections(startAxis, axis)
             .translate(...center)
             .rotateFromDirections(startAxis, axis)
+            //.translate(...center.map((c) => c * -1))
             .apply(sectionSource.getOutputData().getPoints().getData());
        return sectionSource;
     };
