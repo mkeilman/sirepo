@@ -3877,6 +3877,20 @@ SIREPO.app.directive('particle3d', function(appState, errorService, frameCache, 
                     });
                 });
 
+                const noseRadius = 0.33 * headRadius;
+                const noseCenter = [headCenter[0], bodyCenter[1] + headRadius + 0.66 * noseRadius, headCenter[2]];
+                let s = vtk.Filters.Sources.vtkSphereSource.newInstance({
+                    radius: noseRadius,
+                    center: noseCenter,
+                    thetaResolution: thetaRez,
+                    phiResolution: phiRez,
+                }).getOutputData();
+                vtkPlotting.setColorSclars(s, [127, 0, 127, 255]);
+                source.addInputData(s);
+                ++n;
+
+                // might omit limbs for clarity, but leaving the code
+                /*
                 const limbRadius = bodyRadius / 6.0;
                 const limbGeom = {};
                 limbGeom[ROSTRAL] = {
@@ -3914,7 +3928,7 @@ SIREPO.app.directive('particle3d', function(appState, errorService, frameCache, 
                         });
                     });
                 });
-
+                */
                 return source;
             }
 

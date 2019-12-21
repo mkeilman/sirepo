@@ -180,6 +180,47 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
         stlReaders = {};
     };
 
+    self.cylinderSection = function(center, axis, radius, height, planes) {
+        const startAxis = [0, 0, 1];
+        const startOrigin = [0, 0, 0];
+        const cylBounds = [-radius, radius, -radius, radius, -height/2.0, height/2.0];
+        const cyl = vtk.Common.DataModel.vtkCylinder.newInstance({
+            radius: radius,
+            center: startOrigin,
+            axis: startAxis
+        });
+
+        const pl = planes.map(function (p) {
+            return vtk.Common.DataModel.vtkPlane.newInstance({
+                normal: p.norm || startAxis,
+                origin: p.origin || startOrigin
+            });
+        });
+
+        // perform the sectioning
+        const section = vtk.Common.DataModel.vtkImplicitBoolean.newInstance({
+            operation: 'Intersection',
+            functions: [cyl, ...pl]
+        });
+
+        const sectionSample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
+            implicitFunction: section,
+            modelBounds: cylBounds,
+            sampleDimensions: [32, 32, 32]
+        });
+
+        const sectionSource = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
+        sectionSource.setInputConnection(sectionSample.getOutputPort());
+        // this transformation adapted from VTK cylinder source - we don't "untranslate" because we want to
+        // rotate in place, not around the global origin
+        vtk.Common.Core.vtkMatrixBuilder
+            .buildFromRadian()
+            .translate(...center)
+            .rotateFromDirections(startAxis, axis)
+            .apply(sectionSource.getOutputData().getPoints().getData());
+       return sectionSource;
+    };
+
     self.getSTLReader = function(file) {
         return stlReaders[file];
     };
@@ -229,47 +270,6 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
         if (stlReaders[file]) {
             delete stlReaders[file];
         }
-    };
-
-    self.cylinderSection = function(center, axis, radius, height, planes) {
-        const startAxis = [0, 0, 1];
-        const startOrigin = [0, 0, 0];
-        const cylBounds = [-radius, radius, -radius, radius, -height/2.0, height/2.0];
-        const cyl = vtk.Common.DataModel.vtkCylinder.newInstance({
-            radius: radius,
-            center: startOrigin,
-            axis: startAxis
-        });
-
-        const pl = planes.map(function (p) {
-            return vtk.Common.DataModel.vtkPlane.newInstance({
-                normal: p.norm || startAxis,
-                origin: p.origin || startOrigin
-            });
-        });
-
-        // perform the sectioning
-        const section = vtk.Common.DataModel.vtkImplicitBoolean.newInstance({
-            operation: 'Intersection',
-            functions: [cyl, ...pl]
-        });
-
-        const sectionSample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
-            implicitFunction: section,
-            modelBounds: cylBounds,
-            sampleDimensions: [32, 32, 32]
-        });
-
-        const sectionSource = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
-        sectionSource.setInputConnection(sectionSample.getOutputPort());
-        // this transformation adapted from VTK cylinder source - we don't "untranslate" because we want to
-        // rotate in place, not around the global origin
-        vtk.Common.Core.vtkMatrixBuilder
-            .buildFromRadian()
-            .translate(...center)
-            .rotateFromDirections(startAxis, axis)
-            .apply(sectionSource.getOutputData().getPoints().getData());
-       return sectionSource;
     };
 
     self.setColorSclars = function(data, color) {
