@@ -1809,7 +1809,7 @@ SIREPO.app.directive('roiTable', function(appState, panelState, rs4piService) {
     };
 });
 
-SIREPO.app.directive('roi3d', function(appState, panelState, rs4piService) {
+SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piService) {
     return {
         restrict: 'A',
         template: [
@@ -1862,8 +1862,22 @@ SIREPO.app.directive('roi3d', function(appState, panelState, rs4piService) {
                 var pi = 0;
                 var pl = 0;
 
-                for (z in roi.contour) {
+                //let nz = 0;
+                //for (z in roi.contour) {
+                const zPlanes = Object.keys(roi.contour).sort(function (z1, z2) {
+                    return parseFloat(z1) - parseFloat(z2);
+                });
+                //srdbg('zplanes', zPlanes);
+
+                let polys = {};
+                zPlanes.forEach(function (z, zIdx) {
+                    let dz = parseFloat(zPlanes[zIdx + 1]) - parseFloat(z);
+                    if (zIdx < zPlanes.length - 1) {
+                        //srdbg('z', z, 'next z', zPlanes[zIdx + 1], 'dz', dz);
+                    }
+                    let zPolys =[];
                     for (segment = 0; segment < roi.contour[z].length; segment++) {
+                        let segPolyPts = [];
                         var cPoints = roi.contour[z][segment];
                         var zp = parseFloat(z);
                         lines[pl] = cPoints.length / 2 + 1;
@@ -1872,18 +1886,90 @@ SIREPO.app.directive('roi3d', function(appState, panelState, rs4piService) {
                         for (var i = 0; i < cPoints.length; i += 2) {
                             points[pi] = cPoints[i];
                             points[pi + 1] = cPoints[i + 1];
+                            segPolyPts.push(geometry.point(points[pi], points[pi + 1]));
                             points[pi + 2] = zp;
                             lines[pl] = pi / 3;
                             pl++;
                             pi += 3;
                         }
+                        let p = geometry.polygon(segPolyPts);
+                        //srdbg(z, segment, p.bounds());
+                        zPolys.push(p);
                         lines[pl] = firstPoint;
                         pl++;
                     }
-                }
+                    polys[z] = zPolys;
+                   // ++nz;
+                    });
+               // }
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
+
+                //srdbg('polys', polys);
+
+                const bnds = pd.getBounds();
+                const bndRect = geometry.rectFromArr([[bnds[0], bnds[2]], [bnds[1], bnds[3]]]);
+                //srdbg('boundary rect', bndRect.points());
+                const ctr = [
+                    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
+                    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
+                    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
+                ];
+                //srdbg('pd', pd, bnds, ctr);
+
+                function inSegment(pt, z, segNum) {
+                    //const pt = geometry.pointFromArr(coords);
+                    const poly = polys[z][segNum];
+                    //srdbg('checking for pt', pt, 'in', poly.bounds());
+                    return poly.containsPoint(pt);
+                }
+
+                //const boundsImpl = vtk.Common.DataModel.vtkBox.newInstance({
+                //    bounds: bnds,
+                //});
+                let ns = 0;
+                const impl =  {
+                    evaluateFunction: function (coords) {
+                        if (ns % 1000 === 0) {
+                            //srdbg('eval', ns, coords);
+                        }
+                        ++ns;
+                        const pt = geometry.pointFromArr(coords);
+                        // outside the footprint or z bounds
+                        //if (! bndRect.containsPoint(pt) || pt.z < bnds[4] || pt.z > bnds[5]) {
+                        //    return -1;
+                        //}
+                        // closest zplane
+                        const diffs = Object.keys(polys).map(function (z) {
+                            return Math.abs(parseFloat(z) - pt.z);
+                        });
+                        const dz = Math.min.apply(null, diffs);
+                        const zPlane = zPlanes[diffs.indexOf(dz)];
+                        //srdbg('checking for pt', pt, 'in', zPlane);
+                        for (segment = 0; segment < roi.contour[zPlane].length; segment++) {
+                            if(inSegment(pt, zPlane, segment)) {
+                                return 1;
+                            }
+                        }
+                        return -1;
+                    },
+                    getBounds: function () {
+                        return bnds;
+                    },
+                };
+
+                srdbg('getting sample');
+                const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
+                    implicitFunction: impl,
+                    modelBounds: bnds,
+                    sampleDimensions: [32, 32, 32]
+                });
+                srdbg('init cubes');
+                const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
+                srdbg('setting input from sample');
+                cubes.setInputConnection(sample.getOutputPort());
+                srdbg('done setting input from sample');
 
                 /*
                 var verts = new window.Uint32Array(numPts + 1);
@@ -1895,13 +1981,26 @@ SIREPO.app.directive('roi3d', function(appState, panelState, rs4piService) {
                 */
 
                 var mapper = vtk.Rendering.Core.vtkMapper.newInstance();
-                actor = vtk.Rendering.Core.vtkActor.newInstance();
-                actor.getProperty().setColor(0.3, 0.4, 0.9);
+                actor = vtk.Rendering.Core.vtkActor.newInstance({
+                    mapper: mapper,
+                });
+                actor.getProperty().setColor(1.0, 0.0, 0.0);
                 //actor.getProperty().setEdgeVisibility(true);
                 //actor.getProperty().setPointSize(2);
                 mapper.setInputData(pd);
-                actor.setMapper(mapper);
-                fsRenderer.getRenderer().addActor(actor);
+                //actor.setMapper(mapper);
+                //fsRenderer.getRenderer().addActor(actor);
+
+                var m3d = vtk.Rendering.Core.vtkMapper.newInstance();
+                let a3d = vtk.Rendering.Core.vtkActor.newInstance({
+                    mapper: m3d,
+                });
+                a3d.getProperty().setColor(0.6, 0.7, 0.9);
+                a3d.getProperty().setOpacity(0.5);
+                srdbg('setting input from cubes');
+                m3d.setInputConnection(cubes.getOutputPort());
+                fsRenderer.getRenderer().addActor(a3d);
+
                 reset();
             }
 

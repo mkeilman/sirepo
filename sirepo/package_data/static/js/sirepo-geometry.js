@@ -59,7 +59,7 @@ SIREPO.app.service('geometry', function(utilities) {
                 // we need to specify how close we can get to account for rounding errors
                 var t = tolerance || 0.0001;
                 if (this.slope() === Infinity) {
-                    return equalWithin(p.x, point1.x, t);  //Math.abs(p.x - point1.x) <= t;
+                    return equalWithin(p.x, point1.x, t);
                 }
                 var y = this.slope() * p.x + this.intercept();
 
@@ -329,6 +329,49 @@ SIREPO.app.service('geometry', function(utilities) {
         return this.point(arr[0], arr[1], arr[2]);
     };
 
+    // construct from array of points, assumed to be in "drawing order"
+    this.polygon = function (pts) {
+
+        return {
+            bounds: function() {
+                const x = pts.map(function (pt) {
+                    return pt.x;
+                });
+                const y = pts.map(function (pt) {
+                    return pt.y;
+                });
+                return [
+                    Math.min.apply(null, x), Math.max.apply(null, x),
+                    Math.min.apply(null, y), Math.max.apply(null, y),
+                ];
+            },
+            containsPoint: function(pt) {
+                // "ray casting"
+                // arbitrary point outside the bounds
+                const b = this.bounds();
+                let outPt = svc.point(2 * b[0], 2 * b[2]);
+                let raySeg = svc.lineSegment(outPt, pt);
+                let numCrossings = 0;
+                this.lineSegments().forEach(function (ls) {
+                    //srdbg('checking ls', lsIdx, ls.points(), ls.intersection(raySeg));
+                    numCrossings += (! ! ls.intersection(raySeg));
+                });
+                //srdbg('pt', pt, 'has', numCrossings, 'xings');
+                return numCrossings % 2 === 1;
+            },
+            lineSegments: function() {
+                //let ls = [];
+                //pts.forEach(function (pt, ptIdx) {
+                //    ls.push(svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt));
+                //});
+                return ls;
+            },
+            points: function () {
+                return pts;
+            }
+        };
+    };
+
     // 2d only
     this.rect = function(diagPoint1, diagPoint2) {
         return {
@@ -439,6 +482,10 @@ SIREPO.app.service('geometry', function(utilities) {
                 return this.sides()[1].length();
             }
         };
+    };
+
+    this.rectFromArr = function (arr) {
+        return svc.rect(svc.point(arr[0][0], arr[0][1]), svc.point(arr[1][0], arr[1][1]));
     };
 
     // Sort (with optional reversal) the point array by the values in the given dimension;
