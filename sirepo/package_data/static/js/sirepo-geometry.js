@@ -311,11 +311,7 @@ SIREPO.app.service('geometry', function(utilities) {
                 if (this.dimension() != p2.dimension()) {
                     throw new Error('Points in array have different dimensions: ' + this.dimension() + ' != ' + p2.dimension());
                 }
-                return Math.sqrt(
-                    (p2.x - this.x) * (p2.x - this.x) +
-                    (p2.y - this.y) * (p2.y - this.y) +
-                    (p2.z - this.z) * (p2.z - this.z)
-                );
+                return Math.hypot(p2.x - this.x, p2.y - this.y, p2.z - this.z);
             },
             equals: function (p2) {
                 var t = 0.0001;
@@ -338,15 +334,19 @@ SIREPO.app.service('geometry', function(utilities) {
     };
 
     this.pointFromArr = function (arr) {
-        return this.point(arr[0], arr[1], arr[2]);
+        return this.point(...arr);
     };
 
     // construct from array of points, assumed to be in "drawing order"
     this.polygon = function (pts) {
 
-        // static properties set at init
-        let bounds = {x: {}, y: {}, z: {}};
+        if (pts.length < 3) {
+            throw new Error('A polygon requires at least 3 points (' + pts.length + ' provided)');
+        }
+
+        let bounds = {};
         svc.basis.forEach(function (dim) {
+            bounds[dim] = {};
             const d = pts.map(function (pt) {
                 return pt[dim];
             });
@@ -361,65 +361,73 @@ SIREPO.app.service('geometry', function(utilities) {
             sides[ptIdx] = svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt);
         });
 
-        return {
-
-            boundaryRect: function() {
-                const b = this.bounds();
-                return svc.rect(svc.point(b.x.min, b.y.min), svc.point(b.x.max, b.y.max));
-            },
-
-            bounds: function() {
-                const b = {};
-                svc.basis.forEach(function (dim) {
-                    const d = pts.map(function (pt) {
-                        return pt[dim];
-                    });
-                    b[dim] = {};
-                    b[dim].min = Math.min.apply(null, d);
-                    b[dim].max = Math.max.apply(null, d);
-                });
-                return b;
-            },
-
-            containsPoint: function(pt) {
-                // quick check for entirely in or entirely out
-                if (! boundaryRect.containsPoint(pt)) {
-                    return false;
-                }
-                // "ray casting"
-                // point outside the bounds - use same y as input point
-                let outPt = svc.point(-Number.MAX_VALUE, pt.y);
-                let raySeg = svc.lineSegment(pt, outPt);
-                let numCrossings = 0;
-                // ignore sides whose points are both on the same side of the input point
-                sides.filter(function (ls) {
-                    return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
-                })
-                    .forEach(function (ls) {
-                    numCrossings += (! ! ls.intersection(raySeg));
-                });
-                return numCrossings % 2 === 1;
-            },
-
-            points: function () {
-                return pts;
-            },
-
-            sides: function() {
-                let ls = [];
-                pts.forEach(function (pt, ptIdx) {
-                    ls.push(svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt));
-                });
-                return ls;
-            },
+        // static properties set at init
+        let poly = {
+            bnds: bounds,
+            pts: pts,
+            rect: boundaryRect,
+            sides: sides,
         };
+
+        poly.containsPoint = function(pt) {
+            // quick check for entirely in or entirely out
+            if (! boundaryRect.containsPoint(pt)) {
+                return false;
+            }
+            // "ray casting"
+            // point outside the bounds - use same y as input point
+            let outPt = svc.point(-Number.MAX_VALUE, pt.y);
+            let raySeg = svc.lineSegment(pt, outPt);
+            let numCrossings = 0;
+            // ignore sides whose points are both on the same side of the input point
+            sides.filter(function (ls) {
+                return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
+            })
+                .forEach(function (ls) {
+                numCrossings += (! ! ls.intersection(raySeg));
+            });
+            return numCrossings % 2 === 1;
+        };
+
+        /*
+        poly.getBoundaryRect = function() {
+            const b = this.bounds();
+            return svc.rect(svc.point(b.x.min, b.y.min), svc.point(b.x.max, b.y.max));
+        };
+
+        poly.getBounds = function() {
+            const b = {};
+            svc.basis.forEach(function (dim) {
+                const d = pts.map(function (pt) {
+                    return pt[dim];
+                });
+                b[dim] = {};
+                b[dim].min = Math.min.apply(null, d);
+                b[dim].max = Math.max.apply(null, d);
+            });
+            return b;
+        };
+
+        poly.getPoints = function () {
+            return pts;
+        };
+
+        poly.getSides = function() {
+            let ls = Array(pts.length);
+            pts.forEach(function (pt, ptIdx) {
+                ls[ptIdx] = svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt);
+            });
+            return ls;
+        };
+        */
+        return poly;
     };
 
-    //this.polyFromArr = function (arr) {
-    //    return this.polyFromArr(arr.map(function (c) {
-    //        return svc.pointFromArr(c);
-    //    }));
-    //};
+    this.polyFromArr = function (arr) {
+        return this.polygon(arr.map(function (c) {
+            return svc.pointFromArr(c);
+        }));
+    };
 
     // 2d only
     this.rect = function(diagPoint1, diagPoint2) {
@@ -534,7 +542,7 @@ SIREPO.app.service('geometry', function(utilities) {
     };
 
     this.rectFromArr = function (arr) {
-        return svc.rect(svc.point(arr[0][0], arr[0][1]), svc.point(arr[1][0], arr[1][1]));
+        return svc.rect(svc.pointFromArr(arr[0]), svc.pointFromArr(arr[1]));
     };
 
     // Sort (with optional reversal) the point array by the values in the given dimension;

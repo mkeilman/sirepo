@@ -26,6 +26,7 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
     var dicomHistogram = {};
     var planeCoord = {};
     var roiPoints = {};
+    var roiPolyInfo = {};
     var simulationId = null;
     // zoom or advanceFrame
     self.mouseWheelMode = 'advanceFrame';
@@ -42,6 +43,39 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
         dicomAnimation4: ['dicomPlane', 'startTime'],
         doseCalculation: [],
         dicomDose: ['startTime'],
+    };
+
+    self.addPolysForActiveROI = function(polys) {
+
+        let bnds = [
+            Number.MAX_VALUE, -Number.MAX_VALUE,
+            Number.MAX_VALUE, -Number.MAX_VALUE,
+            Number.MAX_VALUE, -Number.MAX_VALUE,
+        ];
+        for (let zp in polys) {
+            const z = parseFloat(zp);
+            bnds[4] = Math.min(bnds[4], z);
+            bnds[5] = Math.max(bnds[5], z);
+            for (let sIdx in polys[zp]) {
+                let p = polys[zp][sIdx];
+                let b = p.bnds;
+                bnds[0] = Math.min(bnds[0], b.x.min);
+                bnds[1] = Math.max(bnds[1], b.x.max);
+                bnds[2] = Math.min(bnds[2], b.y.min);
+                bnds[3] = Math.max(bnds[3], b.y.max);
+            }
+        }
+        const info = {
+            bnds: bnds,
+            ctr: [
+                bnds[0] + 0.5 * (bnds[1] - bnds[0]),
+                bnds[2] + 0.5 * (bnds[3] - bnds[2]),
+                bnds[4] + 0.5 * (bnds[5] - bnds[4]),
+            ],
+            polys: polys,
+        };
+        roiPolyInfo[self.getActiveROI()] = info;
+        return info;
     };
 
     self.dicomTitle = function(modelName) {
@@ -75,6 +109,9 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
         return roiPoints[self.getActiveROI()];
     };
 
+    self.getActiveROIPolyInfo = function() {
+        return roiPolyInfo[self.getActiveROI()];
+    };
 
     self.getDicomHistogram = function() {
         return dicomHistogram;
@@ -1844,9 +1881,8 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 if (actor) {
                     fsRenderer.getRenderer().removeActor(actor);
                 }
-                if (a3d) {
-                    fsRenderer.getRenderer().removeActor(a3d);
-                }
+                fsRenderer.getRenderer().removeActor(a3d);
+
                 var roi = rs4piService.getActiveROIPoints();
                 if (! roi) {
                     return;
@@ -1866,81 +1902,99 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 var pi = 0;
                 var pl = 0;
 
-                //let nz = 0;
-                //for (z in roi.contour) {
                 const zPlanes = Object.keys(roi.contour).sort(function (z1, z2) {
                     return parseFloat(z1) - parseFloat(z2);
                 });
                 //srdbg('zplanes', zPlanes);
 
-                let polys = {};
-                zPlanes.forEach(function (z) {
-                    let zPolys = Array(roi.contour[z].length);
-                    for (segment = 0; segment < roi.contour[z].length; segment++) {
-                        let segPolyPts = [];
-                        var cPoints = roi.contour[z][segment];
-                        var zp = parseFloat(z);
-                        lines[pl] = cPoints.length / 2 + 1;
-                        pl++;
-                        var firstPoint = pi / 3;
-                        for (let i = 0; i < cPoints.length; i += 2) {
-                            points[pi] = cPoints[i];
-                            points[pi + 1] = cPoints[i + 1];
-                            segPolyPts.push(geometry.point(points[pi], points[pi + 1]));
-                            //segPolyPts.push([points[pi]], points[pi + 1]);
-                            points[pi + 2] = zp;
-                            lines[pl] = pi / 3;
+                let info = rs4piService.getActiveROIPolyInfo();
+                const tp0 = Date.now();
+                if (! info) {
+                    let polys = {};
+                    zPlanes.forEach(function (z) {
+                        let zPolys = Array(roi.contour[z].length);
+                        for (segment = 0; segment < roi.contour[z].length; segment++) {
+                            var cPoints = roi.contour[z][segment];
+                            let segPolyPts = Array(cPoints.length / 2);
+                            var zp = parseFloat(z);
+                            lines[pl] = cPoints.length / 2 + 1;
                             pl++;
-                            pi += 3;
+                            var firstPoint = pi / 3;
+                            for (let i = 0; i < cPoints.length; i += 2) {
+                                points[pi] = cPoints[i];
+                                points[pi + 1] = cPoints[i + 1];
+                                points[pi + 2] = zp;
+                                segPolyPts[i / 2] = [cPoints[i], cPoints[i + 1], zp];
+                                lines[pl] = pi / 3;
+                                pl++;
+                                pi += 3;
+                            }
+                            zPolys[segment] = geometry.polyFromArr(segPolyPts);
+                            lines[pl] = firstPoint;
+                            pl++;
                         }
-                        zPolys[segment] = geometry.polygon(segPolyPts);
-                        //zPolys[segment] = geometry.polyFromArr(segPolyPts);
-                        lines[pl] = firstPoint;
-                        pl++;
-                    }
-                    polys[z] = zPolys;
-                });
+                        polys[z] = zPolys;
+                    });
+                    info = rs4piService.addPolysForActiveROI(polys);
+                }
+                const tp1 = Date.now();
+                srdbg('done build polys', info, tp1 - tp0);
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
 
-                const bnds = pd.getBounds();
-                const ctr = geometry.pointFromArr([
-                    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
-                    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
-                    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
-                ]);
+                //bnds = pd.getBounds();
+                //srdbg('got bnds', bnds);
+                //const ctr = geometry.pointFromArr([
+                //    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
+                //    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
+                //    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
+                //]);
+                //let bnds = [
+                //    Number.MAX_VALUE, -Number.MAX_VALUE,
+                //    Number.MAX_VALUE, -Number.MAX_VALUE,
+                //    parseFloat(zPlanes[0]), parseFloat(zPlanes[zPlanes.length - 1])
+                //];
+
+                //const ctr = geometry.pointFromArr([
+                //    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
+                //    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
+                //    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
+                //]);
+                const ctr = geometry.pointFromArr(info.ctr);
+                const dz = (info.bnds[5] - info.bnds[4]) / (zPlanes.length - 1);
 
                 let ns = 0;
-                const impl =  {
+                const polyImpl =  {
                     evaluateFunction: function (coords) {
                         ++ns;
                         const pt = geometry.pointFromArr(coords);
                         const d = pt.dist(ctr);
                         // closest zplane
-                        const diffs = Object.keys(polys).map(function (z) {
-                            return Math.abs(parseFloat(z) - pt.z);
-                        });
-                        const dz = Math.min.apply(null, diffs);
-                        const zPlane = zPlanes[diffs.indexOf(dz)];
+                        const zPlane = zPlanes[Math.floor((pt.z - info.bnds[4]) / dz)];
                         for (segment = 0; segment < roi.contour[zPlane].length; segment++) {
-                            if(polys[zPlane][segment].containsPoint(pt)) {
+                            if(info.polys[zPlane][segment].containsPoint(pt)) {
                                 return d;
                             }
                         }
                         return -d;
                     },
                     getBounds: function () {
-                        return bnds;
+                        return info.bnds;
                     },
                 };
+                // test speed against solid box
+                const bx = vtk.Common.DataModel.vtkBox.newInstance();
+                bx.addBounds(info.bnds);
 
                 // build a regular grid
+                const rez = [32, 32, 32];  // set with UI?  use zPlanes.length?  can be large
                 const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
-                    implicitFunction: impl,
-                    modelBounds: bnds,
-                    sampleDimensions: [32, 32, 32]  // use zPlanes.length?  can be large
+                    implicitFunction: polyImpl,
+                    modelBounds: info.bnds,
+                    sampleDimensions: rez
                 });
+                //srdbg('sample pts', sample.getOutputData().getPointData().getScalars().getData());
                 const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
                 cubes.setInputConnection(sample.getOutputPort());
 
@@ -1969,7 +2023,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                     mapper: m3d,
                 });
                 a3d.getProperty().setColor(0.6, 0.7, 0.9);
-                a3d.getProperty().setOpacity(0.24);
+                a3d.getProperty().setOpacity(0.50);
                 //a3d.getProperty().setEdgeVisibility(true);
                 m3d.setInputConnection(cubes.getOutputPort());
                 fsRenderer.getRenderer().addActor(a3d);
