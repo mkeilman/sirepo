@@ -57,13 +57,14 @@ SIREPO.app.service('geometry', function(utilities) {
             containsPoint: function (p, tolerance) {
                 // since we do math to see if the point satisfies the line's equation,
                 // we need to specify how close we can get to account for rounding errors
-                var t = tolerance || 0.0001;
-                if (this.slope() === Infinity) {
+                const t = tolerance || 0.0001;
+                const s = this.slope();
+                if (s === Infinity) {
                     return equalWithin(p.x, point1.x, t);
                 }
-                var y = this.slope() * p.x + this.intercept();
+                const y = s * p.x + this.intercept();
 
-                return equalWithin(p.y, y, t); //Math.abs(p.y - y) <= t;
+                return equalWithin(p.y, y, t);
             },
             equals: function (l2) {
                 if (this.slope() === Infinity && l2.slope() === Infinity) {
@@ -127,14 +128,20 @@ SIREPO.app.service('geometry', function(utilities) {
     // 2d only
     this.lineSegment = function(point1, point2) {
         var ls = {
+            ext: [
+                [Math.min(point1.x, point2.x), Math.max(point1.x, point2.x)],
+                [Math.min(point1.y, point2.y), Math.max(point1.y, point2.y)]
+            ],
             p1: point1,
-            p2: point2
+            p2: point2,
+            l: svc.line(point1, point2)
         };
+
         ls.containsPoint = function (p) {
             var ext = this.extents();
             return this.line().containsPoint(p) &&
-                (p.x >= ext[0][0] && p.x <= ext[0][1]) &&
-                (p.y >= ext[1][0] && p.y <= ext[1][1]);
+                (gtOrEqualWithin(p.x, ext[0][0]) && ltOrEqualWithin(p.x, ext[0][1])) &&
+                (gtOrEqualWithin(p.y, ext[1][0]) && ltOrEqualWithin(p.y, ext[1][1]));
         };
         ls.equals = function (ls2) {
             var ps1 = this.points();
@@ -180,8 +187,13 @@ SIREPO.app.service('geometry', function(utilities) {
             });
         };
         ls.update = function(newp1, newp2) {
+            this.ext = [
+                [Math.min(newp1.x, newp2.x), Math.max(newp1.x, newp2.x)],
+                [Math.min(newp1.y, newp2.y), Math.max(newp1.y, newp2.y)]
+            ];
             this.p1 = newp1;
             this.p2 = newp2;
+            this.l = svc.line(newp1, newp2);
         };
         ls.vector = function () {
             return [this.p1.x - this.p2.x, this.p1.y - this.p2.y];
@@ -332,45 +344,82 @@ SIREPO.app.service('geometry', function(utilities) {
     // construct from array of points, assumed to be in "drawing order"
     this.polygon = function (pts) {
 
+        // static properties set at init
+        let bounds = {x: {}, y: {}, z: {}};
+        svc.basis.forEach(function (dim) {
+            const d = pts.map(function (pt) {
+                return pt[dim];
+            });
+            bounds[dim].min = Math.min.apply(null, d);
+            bounds[dim].max = Math.max.apply(null, d);
+        });
+
+        let boundaryRect = svc.rect(svc.point(bounds.x.min, bounds.y.min), svc.point(bounds.x.max, bounds.y.max));
+
+        let sides = Array(pts.length);
+        pts.forEach(function (pt, ptIdx) {
+            sides[ptIdx] = svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt);
+        });
+
         return {
-            bounds: function() {
-                const x = pts.map(function (pt) {
-                    return pt.x;
-                });
-                const y = pts.map(function (pt) {
-                    return pt.y;
-                });
-                return [
-                    Math.min.apply(null, x), Math.max.apply(null, x),
-                    Math.min.apply(null, y), Math.max.apply(null, y),
-                ];
-            },
-            containsPoint: function(pt) {
-                // "ray casting"
-                // arbitrary point outside the bounds
+
+            boundaryRect: function() {
                 const b = this.bounds();
-                let outPt = svc.point(2 * b[0], 2 * b[2]);
-                let raySeg = svc.lineSegment(outPt, pt);
+                return svc.rect(svc.point(b.x.min, b.y.min), svc.point(b.x.max, b.y.max));
+            },
+
+            bounds: function() {
+                const b = {};
+                svc.basis.forEach(function (dim) {
+                    const d = pts.map(function (pt) {
+                        return pt[dim];
+                    });
+                    b[dim] = {};
+                    b[dim].min = Math.min.apply(null, d);
+                    b[dim].max = Math.max.apply(null, d);
+                });
+                return b;
+            },
+
+            containsPoint: function(pt) {
+                // quick check for entirely in or entirely out
+                if (! boundaryRect.containsPoint(pt)) {
+                    return false;
+                }
+                // "ray casting"
+                // point outside the bounds - use same y as input point
+                let outPt = svc.point(-Number.MAX_VALUE, pt.y);
+                let raySeg = svc.lineSegment(pt, outPt);
                 let numCrossings = 0;
-                this.lineSegments().forEach(function (ls) {
-                    //srdbg('checking ls', lsIdx, ls.points(), ls.intersection(raySeg));
+                // ignore sides whose points are both on the same side of the input point
+                sides.filter(function (ls) {
+                    return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
+                })
+                    .forEach(function (ls) {
                     numCrossings += (! ! ls.intersection(raySeg));
                 });
-                //srdbg('pt', pt, 'has', numCrossings, 'xings');
                 return numCrossings % 2 === 1;
             },
-            lineSegments: function() {
-                //let ls = [];
-                //pts.forEach(function (pt, ptIdx) {
-                //    ls.push(svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt));
-                //});
-                return ls;
-            },
+
             points: function () {
                 return pts;
-            }
+            },
+
+            sides: function() {
+                let ls = [];
+                pts.forEach(function (pt, ptIdx) {
+                    ls.push(svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt));
+                });
+                return ls;
+            },
         };
     };
+
+    //this.polyFromArr = function (arr) {
+    //    return this.polyFromArr(arr.map(function (c) {
+    //        return svc.pointFromArr(c);
+    //    }));
+    //};
 
     // 2d only
     this.rect = function(diagPoint1, diagPoint2) {
@@ -672,6 +721,14 @@ SIREPO.app.service('geometry', function(utilities) {
     function equalWithin(val1, val2, tolerance) {
         var tol = tolerance || 0.0001;
         return Math.abs(val2 - val1) < tol;
+    }
+
+    function gtOrEqualWithin(val1, val2, tolerance) {
+        return val1 > val2 || equalWithin(val1, val2, tolerance);
+    }
+
+    function ltOrEqualWithin(val1, val2, tolerance) {
+        return val1 < val2 || equalWithin(val1, val2, tolerance);
     }
 
     function sectionOfEdgeInBounds(edge, boundingRect, dim, reverse) {

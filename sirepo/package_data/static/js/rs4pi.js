@@ -1822,6 +1822,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
             var initialized = false;
             var fsRenderer = null;
             var actor = null;
+            var a3d = null;
 
             function init() {
                 if (initialized) {
@@ -1842,6 +1843,9 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
             function showActiveRoi() {
                 if (actor) {
                     fsRenderer.getRenderer().removeActor(actor);
+                }
+                if (a3d) {
+                    fsRenderer.getRenderer().removeActor(a3d);
                 }
                 var roi = rs4piService.getActiveROIPoints();
                 if (! roi) {
@@ -1870,12 +1874,8 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 //srdbg('zplanes', zPlanes);
 
                 let polys = {};
-                zPlanes.forEach(function (z, zIdx) {
-                    let dz = parseFloat(zPlanes[zIdx + 1]) - parseFloat(z);
-                    if (zIdx < zPlanes.length - 1) {
-                        //srdbg('z', z, 'next z', zPlanes[zIdx + 1], 'dz', dz);
-                    }
-                    let zPolys =[];
+                zPlanes.forEach(function (z) {
+                    let zPolys = Array(roi.contour[z].length);
                     for (segment = 0; segment < roi.contour[z].length; segment++) {
                         let segPolyPts = [];
                         var cPoints = roi.contour[z][segment];
@@ -1883,93 +1883,66 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                         lines[pl] = cPoints.length / 2 + 1;
                         pl++;
                         var firstPoint = pi / 3;
-                        for (var i = 0; i < cPoints.length; i += 2) {
+                        for (let i = 0; i < cPoints.length; i += 2) {
                             points[pi] = cPoints[i];
                             points[pi + 1] = cPoints[i + 1];
                             segPolyPts.push(geometry.point(points[pi], points[pi + 1]));
+                            //segPolyPts.push([points[pi]], points[pi + 1]);
                             points[pi + 2] = zp;
                             lines[pl] = pi / 3;
                             pl++;
                             pi += 3;
                         }
-                        let p = geometry.polygon(segPolyPts);
-                        //srdbg(z, segment, p.bounds());
-                        zPolys.push(p);
+                        zPolys[segment] = geometry.polygon(segPolyPts);
+                        //zPolys[segment] = geometry.polyFromArr(segPolyPts);
                         lines[pl] = firstPoint;
                         pl++;
                     }
                     polys[z] = zPolys;
-                   // ++nz;
-                    });
-               // }
+                });
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
 
-                //srdbg('polys', polys);
-
                 const bnds = pd.getBounds();
-                const bndRect = geometry.rectFromArr([[bnds[0], bnds[2]], [bnds[1], bnds[3]]]);
-                //srdbg('boundary rect', bndRect.points());
-                const ctr = [
+                const ctr = geometry.pointFromArr([
                     bnds[0] + 0.5 * (bnds[1] - bnds[0]),
                     bnds[2] + 0.5 * (bnds[3] - bnds[2]),
                     bnds[4] + 0.5 * (bnds[5] - bnds[4]),
-                ];
-                //srdbg('pd', pd, bnds, ctr);
+                ]);
 
-                function inSegment(pt, z, segNum) {
-                    //const pt = geometry.pointFromArr(coords);
-                    const poly = polys[z][segNum];
-                    //srdbg('checking for pt', pt, 'in', poly.bounds());
-                    return poly.containsPoint(pt);
-                }
-
-                //const boundsImpl = vtk.Common.DataModel.vtkBox.newInstance({
-                //    bounds: bnds,
-                //});
                 let ns = 0;
                 const impl =  {
                     evaluateFunction: function (coords) {
-                        if (ns % 1000 === 0) {
-                            //srdbg('eval', ns, coords);
-                        }
                         ++ns;
                         const pt = geometry.pointFromArr(coords);
-                        // outside the footprint or z bounds
-                        //if (! bndRect.containsPoint(pt) || pt.z < bnds[4] || pt.z > bnds[5]) {
-                        //    return -1;
-                        //}
+                        const d = pt.dist(ctr);
                         // closest zplane
                         const diffs = Object.keys(polys).map(function (z) {
                             return Math.abs(parseFloat(z) - pt.z);
                         });
                         const dz = Math.min.apply(null, diffs);
                         const zPlane = zPlanes[diffs.indexOf(dz)];
-                        //srdbg('checking for pt', pt, 'in', zPlane);
                         for (segment = 0; segment < roi.contour[zPlane].length; segment++) {
-                            if(inSegment(pt, zPlane, segment)) {
-                                return 1;
+                            if(polys[zPlane][segment].containsPoint(pt)) {
+                                return d;
                             }
                         }
-                        return -1;
+                        return -d;
                     },
                     getBounds: function () {
                         return bnds;
                     },
                 };
 
-                srdbg('getting sample');
+                // build a regular grid
                 const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
                     implicitFunction: impl,
                     modelBounds: bnds,
-                    sampleDimensions: [32, 32, 32]
+                    sampleDimensions: [32, 32, 32]  // use zPlanes.length?  can be large
                 });
-                srdbg('init cubes');
                 const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
-                srdbg('setting input from sample');
                 cubes.setInputConnection(sample.getOutputPort());
-                srdbg('done setting input from sample');
 
                 /*
                 var verts = new window.Uint32Array(numPts + 1);
@@ -1988,20 +1961,23 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 //actor.getProperty().setEdgeVisibility(true);
                 //actor.getProperty().setPointSize(2);
                 mapper.setInputData(pd);
-                //actor.setMapper(mapper);
+                actor.setMapper(mapper);
                 //fsRenderer.getRenderer().addActor(actor);
 
                 var m3d = vtk.Rendering.Core.vtkMapper.newInstance();
-                let a3d = vtk.Rendering.Core.vtkActor.newInstance({
+                a3d = vtk.Rendering.Core.vtkActor.newInstance({
                     mapper: m3d,
                 });
                 a3d.getProperty().setColor(0.6, 0.7, 0.9);
-                a3d.getProperty().setOpacity(0.5);
-                srdbg('setting input from cubes');
+                a3d.getProperty().setOpacity(0.24);
+                //a3d.getProperty().setEdgeVisibility(true);
                 m3d.setInputConnection(cubes.getOutputPort());
                 fsRenderer.getRenderer().addActor(a3d);
 
+                const t0 = Date.now();
                 reset();
+                const t1 = Date.now();
+                srdbg('done input cubes', ns, 'evals', t1 - t0, 'total', (t1 - t0) / ns, 'per eval');
             }
 
             function reset() {
