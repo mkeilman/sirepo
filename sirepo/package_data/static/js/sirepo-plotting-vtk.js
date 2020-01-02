@@ -38,8 +38,9 @@ SIREPO.app.factory('vtkPlotting', function(appState, errorService, geometry, plo
             if (source) {
                 m.setInputConnection(source.getOutputPort());
             }
-            var a = vtk.Rendering.Core.vtkActor.newInstance();
-            a.setMapper(m);
+            var a = vtk.Rendering.Core.vtkActor.newInstance({
+                mapper: m
+            });
 
             return {
                 actor: a,

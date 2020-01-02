@@ -68,7 +68,7 @@ SIREPO.app.service('geometry', function(utilities) {
             },
             equals: function (l2) {
                 if (this.slope() === Infinity && l2.slope() === Infinity) {
-                    return this.points()[0].x === l2.points()[0].x;
+                    return equalWithin(this.points()[0].x, l2.points()[0].x);
                 }
                 return this.slope() === l2.slope() && this.intercept() === l2.intercept();
             },
@@ -146,8 +146,8 @@ SIREPO.app.service('geometry', function(utilities) {
         ls.equals = function (ls2) {
             var ps1 = this.points();
             var ps2 = ls2.points();
-            return (ps1[0].equals(ps2[0]) && ps1[1].equals(ps2[1])) ||
-                (ps1[0].equals(ps2[1]) && ps1[1].equals(ps2[0]));
+            return (equalWithin(ps1[0], ps2[0]) && equalWithin(ps1[1], ps2[1])) ||
+                (equalWithin(ps1[0], ps2[1]) && equalWithin(ps1[1], ps2[0]));
         };
         ls.extents = function() {
             var pts = this.points();
@@ -170,7 +170,7 @@ SIREPO.app.service('geometry', function(utilities) {
             return svc.line(this.p1, this.p2);
         };
         ls.pointFilter = function() {
-            var ls = this;
+            let ls = this;
             return function (point) {
                 return ls.containsPoint(point);
             };
@@ -363,9 +363,9 @@ SIREPO.app.service('geometry', function(utilities) {
 
         // static properties set at init
         let poly = {
-            bnds: bounds,
-            pts: pts,
-            rect: boundaryRect,
+            bounds: bounds,
+            points: pts,
+            boundaryRect: boundaryRect,
             sides: sides,
         };
 
@@ -389,6 +389,8 @@ SIREPO.app.service('geometry', function(utilities) {
             return numCrossings % 2 === 1;
         };
 
+        // should start separating "dynamic" from "static" - if points are not expected to change there is
+        // no reason to recalculate everything.  Maybe an argument?
         /*
         poly.getBoundaryRect = function() {
             const b = this.bounds();

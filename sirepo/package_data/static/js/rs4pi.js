@@ -52,18 +52,24 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
             Number.MAX_VALUE, -Number.MAX_VALUE,
             Number.MAX_VALUE, -Number.MAX_VALUE,
         ];
+        let nx = 0;
+        let ny = 0;
+        let nz = 0;
         for (let zp in polys) {
             const z = parseFloat(zp);
             bnds[4] = Math.min(bnds[4], z);
             bnds[5] = Math.max(bnds[5], z);
             for (let sIdx in polys[zp]) {
                 let p = polys[zp][sIdx];
-                let b = p.bnds;
+                let b = p.bounds;
+                nx = Math.max(nx, p.points.length);
+                ny = Math.max(ny, p.points.length);
                 bnds[0] = Math.min(bnds[0], b.x.min);
                 bnds[1] = Math.max(bnds[1], b.x.max);
                 bnds[2] = Math.min(bnds[2], b.y.min);
                 bnds[3] = Math.max(bnds[3], b.y.max);
             }
+            ++nz;
         }
         const info = {
             bnds: bnds,
@@ -72,8 +78,11 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
                 bnds[2] + 0.5 * (bnds[3] - bnds[2]),
                 bnds[4] + 0.5 * (bnds[5] - bnds[4]),
             ],
+            dx: (bnds[1] - bnds[0]) / nx, dy: (bnds[3] - bnds[2]) / ny, dz: (bnds[5] - bnds[4]) / (nz - 1),
+            nx: nx, ny: ny, nz: nz,
             polys: polys,
         };
+        //srdbg('N', nx, ny, nz);
         roiPolyInfo[self.getActiveROI()] = info;
         return info;
     };
@@ -1909,11 +1918,19 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
 
                 let info = rs4piService.getActiveROIPolyInfo();
                 const tp0 = Date.now();
-                if (! info) {
+                let exts = {};
+                let gxmin = Number.MAX_VALUE;  let gxmax = -Number.MAX_VALUE;
+                let gymin = Number.MAX_VALUE;  let gymax = -Number.MAX_VALUE;
+
+                //if (! info) {
+                    //let exts = {};
                     let polys = {};
                     zPlanes.forEach(function (z) {
                         let zPolys = Array(roi.contour[z].length);
+                        exts[z] = Array(4 * roi.contour[z].length);
                         for (segment = 0; segment < roi.contour[z].length; segment++) {
+                            let xmin = Number.MAX_VALUE;  let xmax = -Number.MAX_VALUE;
+                            let ymin = Number.MAX_VALUE;  let ymax = -Number.MAX_VALUE;
                             var cPoints = roi.contour[z][segment];
                             let segPolyPts = Array(cPoints.length / 2);
                             var zp = parseFloat(z);
@@ -1924,46 +1941,39 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                                 points[pi] = cPoints[i];
                                 points[pi + 1] = cPoints[i + 1];
                                 points[pi + 2] = zp;
+                                xmin = Math.min(xmin, points[pi]);
+                                xmax = Math.max(xmax, points[pi]);
+                                ymin = Math.min(ymin, points[pi + 1]);
+                                ymax = Math.max(ymax, points[pi + 1]);
+                                gxmin = Math.min(gxmin, points[pi]);
+                                gxmax = Math.max(gxmax, points[pi]);
+                                gymin = Math.min(gymin, points[pi + 1]);
+                                gymax = Math.max(gymax, points[pi + 1]);
                                 segPolyPts[i / 2] = [cPoints[i], cPoints[i + 1], zp];
                                 lines[pl] = pi / 3;
                                 pl++;
                                 pi += 3;
                             }
                             zPolys[segment] = geometry.polyFromArr(segPolyPts);
+                            exts[z][4 * segment] = xmin;
+                            exts[z][4 * segment + 1] = xmax;
+                            exts[z][4 * segment + 2] = ymin;
+                            exts[z][4 * segment + 3] = ymax;
                             lines[pl] = firstPoint;
                             pl++;
                         }
+                        //srdbg(z, exts[z], gxmin, gxmax, gymin, gymax);
                         polys[z] = zPolys;
                     });
                     info = rs4piService.addPolysForActiveROI(polys);
-                }
+                //}
                 const tp1 = Date.now();
                 srdbg('done build polys', info, tp1 - tp0);
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
 
-                //bnds = pd.getBounds();
-                //srdbg('got bnds', bnds);
-                //const ctr = geometry.pointFromArr([
-                //    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
-                //    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
-                //    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
-                //]);
-                //let bnds = [
-                //    Number.MAX_VALUE, -Number.MAX_VALUE,
-                //    Number.MAX_VALUE, -Number.MAX_VALUE,
-                //    parseFloat(zPlanes[0]), parseFloat(zPlanes[zPlanes.length - 1])
-                //];
-
-                //const ctr = geometry.pointFromArr([
-                //    bnds[0] + 0.5 * (bnds[1] - bnds[0]),
-                //    bnds[2] + 0.5 * (bnds[3] - bnds[2]),
-                //    bnds[4] + 0.5 * (bnds[5] - bnds[4]),
-                //]);
                 const ctr = geometry.pointFromArr(info.ctr);
-                const dz = (info.bnds[5] - info.bnds[4]) / (zPlanes.length - 1);
-
                 let ns = 0;
                 const polyImpl =  {
                     evaluateFunction: function (coords) {
@@ -1971,9 +1981,9 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                         const pt = geometry.pointFromArr(coords);
                         const d = pt.dist(ctr);
                         // closest zplane
-                        const zPlane = zPlanes[Math.floor((pt.z - info.bnds[4]) / dz)];
-                        for (segment = 0; segment < roi.contour[zPlane].length; segment++) {
-                            if(info.polys[zPlane][segment].containsPoint(pt)) {
+                        const zp = zPlanes[Math.floor((pt.z - info.bnds[4]) / info.dz)];
+                        for (segment = 0; segment < info.polys[zp].length; segment++) {
+                            if(info.polys[zp][segment].containsPoint(pt)) {
                                 return d;
                             }
                         }
@@ -1987,8 +1997,14 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 const bx = vtk.Common.DataModel.vtkBox.newInstance();
                 bx.addBounds(info.bnds);
 
-                // build a regular grid
-                const rez = [32, 32, 32];  // set with UI?  use zPlanes.length?  can be large
+                // build a regular grid - should be able to get this from the imported data
+                // directly
+                 // set with UI?  use zPlanes.length etc.?  can be large
+                const rez = [
+                    Math.min(64, info.nx),
+                    Math.min(64, info.ny),
+                    Math.min(64, info.nz)
+                ];
                 const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
                     implicitFunction: polyImpl,
                     modelBounds: info.bnds,
@@ -1997,6 +2013,56 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 //srdbg('sample pts', sample.getOutputData().getPointData().getScalars().getData());
                 const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
                 cubes.setInputConnection(sample.getOutputPort());
+
+                // using imageData is no faster because we still have to figure out if a given point is in or
+                // out of the polygon.  But if we can read pre-built imageData from a file it will be fast enough
+                // Leaving the code for future reference
+                /*
+                // note that the origin of the image is the min corner, NOT the center!
+                const img = vtk.Common.DataModel.vtkImageData.newInstance({
+                    dataDescription: vtk.Common.DataModel.vtkStructuredData.StructuredType.XYZ_GRID,
+                    //extent: rez,
+                    origin: [info.bnds[0], info.bnds[2], info.bnds[4]],
+                    spacing: [
+                        (info.bnds[1] - info.bnds[0]) / (rez[0] - 1),
+                        (info.bnds[3] - info.bnds[2]) / (rez[1] - 1),
+                        (info.bnds[5] - info.bnds[4]) / (rez[2] - 1),
+                    ]
+                });
+                img.setDimensions(rez);
+                //srdbg('img', img, 'img pd', img.getPointData());
+                const ti0 = Date.now();
+                var lastzp = '';
+                let s = Array(img.getNumberOfPoints()).fill(-1);
+                for (let i = 0; i < img.getNumberOfPoints(); ++i) {
+                    let pt = img.getPoint(i);
+                    const zp = zPlanes[Math.floor((pt[2] - info.bnds[4]) / info.dz)];
+                    const ext = exts[zp];
+                    const nsegs = ext.length / 4;
+                    for (let j = 0; j < nsegs; ++j) {
+                        let inext = pt[0] >= ext[4 * j] && pt[0] <= ext[4 * j + 1] && pt[1] >= ext[4 * j + 2] && pt[1] <= ext[4 * j + 3];
+                        if (inext) {
+                            s[i] = polyImpl.evaluateFunction(pt);  //1;
+                            break;
+                        }
+                    }
+                    s[i] = polyImpl.evaluateFunction(pt);
+                }
+                const ti1 = Date.now();
+                let nsp = s.filter(function (d) {
+                    return d >= 0;
+                }).length;
+                srdbg('done img', nsp, img.getNumberOfPoints(), 'evals', ti1 - ti0, 'total', (ti1 - ti0) / img.getNumberOfPoints(), 'per eval');
+                const ss = {
+                    name: 'scalars',
+                    dataType: 'Float32Array',
+                    numberOfComponents: 1,
+                    values: s
+                };
+                img.getPointData().setScalars(vtk.Common.Core.vtkDataArray.newInstance(ss));
+                const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
+                cubes.setInputData(img);
+                 */
 
                 /*
                 var verts = new window.Uint32Array(numPts + 1);
