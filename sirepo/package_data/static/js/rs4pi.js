@@ -1883,7 +1883,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                         background: [1, 1, 1, 1],
                         container: rw[0],
                     });
-                fsRenderer.getRenderer().getLights()[0].setLightTypeToSceneLight();
+                //fsRenderer.getRenderer().getLights()[0].setLightTypeToSceneLight();
             }
 
             function showActiveRoi() {
@@ -1899,13 +1899,39 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 var numPts = 0;
                 var numLines = 0;
                 var z, segment, points;
+                let bnds = [
+                    Number.MAX_VALUE, -Number.MAX_VALUE,
+                    Number.MAX_VALUE, -Number.MAX_VALUE,
+                    Number.MAX_VALUE, -Number.MAX_VALUE,
+                ];
+                let nGrid = [0, 0, 0];
+
                 for (z in roi.contour) {
+                    ++nGrid[2];
+                    bnds[4] = Math.min(bnds[4], parseFloat(z));
+                    bnds[5] = Math.max(bnds[5], parseFloat(z));
                     for (segment = 0; segment < roi.contour[z].length; segment++) {
                         points = roi.contour[z][segment];
+                        for (let i = 0; i < 2; ++i) {
+                            let c = points.filter(function (p, pIdx) {
+                                return pIdx % 2 === i;
+                            });
+                            nGrid[i] = Math.max(nGrid[i], c.length);
+                            bnds[2 * i] = Math.min(bnds[2 * i], Math.min.apply(null, c));
+                            bnds[2 * i + 1] = Math.max(bnds[2 * i + 1], Math.max.apply(null, c));
+                        }
                         numPts += points.length / 2;
                         numLines++;
                     }
                 }
+                srdbg('max grid', nGrid, 'bnds', bnds);
+
+                let ctr = [
+                    (bnds[0] + bnds[1]) / 2.0,
+                    (bnds[2] + bnds[3]) / 2.0,
+                    (bnds[4] + bnds[5]) / 2.0,
+                ];
+
                 var lines = new window.Uint32Array(numPts + (numLines * 2));
                 points = new window.Float32Array(numPts * 3);
                 var pi = 0;
@@ -1914,155 +1940,229 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 const zPlanes = Object.keys(roi.contour).sort(function (z1, z2) {
                     return parseFloat(z1) - parseFloat(z2);
                 });
+                const dz = Math.abs((parseFloat(zPlanes[zPlanes.length - 1]) - parseFloat(zPlanes[0])) / (zPlanes.length - 1));
                 //srdbg('zplanes', zPlanes);
 
                 let info = rs4piService.getActiveROIPolyInfo();
                 const tp0 = Date.now();
-                let exts = {};
-                let gxmin = Number.MAX_VALUE;  let gxmax = -Number.MAX_VALUE;
-                let gymin = Number.MAX_VALUE;  let gymax = -Number.MAX_VALUE;
+
+                // don't go beyond maximal grid (yet?)
+                nGrid = [
+                    Math.min(128, nGrid[0]),
+                    Math.min(128, nGrid[1]),
+                    Math.min(128, nGrid[2])
+                ];
+                srdbg('final grid', nGrid);
+                const numGridPts = nGrid[0] * nGrid[1] * nGrid[2];
+                let gridSpc = [
+                    Math.abs((bnds[1] - bnds[0])) / (nGrid[0] - 1),
+                    Math.abs((bnds[3] - bnds[2])) / (nGrid[1] - 1),
+                    Math.abs((bnds[5] - bnds[4])) / (nGrid[2] - 1),
+                ];
+
+                function rasterize(coords) {
+                    let cc = Array(coords.length);
+                    coords.forEach(function (c, cIdx) {
+                        cc[cIdx] = toCoords(toInds(c));
+                    });
+                    return cc;
+                }
+
+                function toCoords(inds) {
+                    return inds.map(toCoord);
+                }
+
+                function toCoord(indVal, indIdx) {
+                    return bnds[2 * indIdx] + indVal * gridSpc[indIdx];
+                }
+
+                function toInds(coords) {
+                    return coords.map(toIndex);
+                }
+
+                function toIndex(cVal, cIdx) {
+                    return Math.floor((cVal - bnds[2 * cIdx]) / gridSpc[cIdx]);
+                }
+
+                let ss = Array(numGridPts).fill(-1);
 
                 //if (! info) {
-                    //let exts = {};
                     let polys = {};
-                    zPlanes.forEach(function (z) {
-                        let zPolys = Array(roi.contour[z].length);
-                        exts[z] = Array(4 * roi.contour[z].length);
-                        for (segment = 0; segment < roi.contour[z].length; segment++) {
-                            let xmin = Number.MAX_VALUE;  let xmax = -Number.MAX_VALUE;
-                            let ymin = Number.MAX_VALUE;  let ymax = -Number.MAX_VALUE;
-                            var cPoints = roi.contour[z][segment];
+                    zPlanes.forEach(function (zp) {
+
+                        let z = parseFloat(zp);
+                        // either get closest *existing* z plane or interpolate polygon between planes
+                        let zIdx = Math.floor((z - bnds[4]) / gridSpc[2]);
+                        //let zIdx = Math.floor((z - bnds[4]) / dz);
+                        let zPolys = Array(roi.contour[zp].length);
+                        for (segment = 0; segment < roi.contour[zp].length; segment++) {
+                            var cPoints = roi.contour[zp][segment];
+                            let xIdxMin = Number.MAX_SAFE_INTEGER;
+                            let xIdxMax = Number.MIN_SAFE_INTEGER;
+                            let yIdxMin = Number.MAX_SAFE_INTEGER;
+                            let yIdxMax = Number.MIN_SAFE_INTEGER;
                             let segPolyPts = Array(cPoints.length / 2);
-                            var zp = parseFloat(z);
                             lines[pl] = cPoints.length / 2 + 1;
                             pl++;
                             var firstPoint = pi / 3;
+                            //var vertSegs = { x: [], y: []};
                             for (let i = 0; i < cPoints.length; i += 2) {
                                 points[pi] = cPoints[i];
                                 points[pi + 1] = cPoints[i + 1];
-                                points[pi + 2] = zp;
-                                xmin = Math.min(xmin, points[pi]);
-                                xmax = Math.max(xmax, points[pi]);
-                                ymin = Math.min(ymin, points[pi + 1]);
-                                ymax = Math.max(ymax, points[pi + 1]);
-                                gxmin = Math.min(gxmin, points[pi]);
-                                gxmax = Math.max(gxmax, points[pi]);
-                                gymin = Math.min(gymin, points[pi + 1]);
-                                gymax = Math.max(gymax, points[pi + 1]);
-                                segPolyPts[i / 2] = [cPoints[i], cPoints[i + 1], zp];
+                                points[pi + 2] = z;
+                                //let pp = rasterize([[cPoints[i], cPoints[i + 1], z]]);
+                                //srdbg('p', [cPoints[i], cPoints[i], z], 'pp', pp);
+                                //points[pi] = pp[0][0];
+                                //points[pi + 1] = pp[0][1];
+                                //points[pi + 2] = pp[0][2];
+                                segPolyPts[i / 2] = [cPoints[i], cPoints[i + 1], z];
+                                //segPolyPts[i / 2] = [pp[0][0], pp[0][1], pp[0][2]];
                                 lines[pl] = pi / 3;
                                 pl++;
                                 pi += 3;
+
+                                /*
+                                let inds = toInds([cPoints[i], cPoints[i + 1], z]);
+                                xIdxMin = Math.min(xIdxMin, inds[0]);
+                                xIdxMax = Math.max(xIdxMax, inds[0]);
+                                yIdxMin = Math.min(yIdxMin, inds[1]);
+                                yIdxMax = Math.max(yIdxMax, inds[1]);
+
+                                // collect vertical lines to count crossings later
+                                let vy = [inds[1]];
+                                for (let j = i + 2; j < cPoints.length - 2; j += 2) {
+                                    if (toIndex(cPoints[j], 0) !== inds[0]) {
+                                        break;
+                                    }
+                                    vy.push(toIndex(cPoints[j + 1], 1));
+                                }
+                                if (vy.length > 1) {
+                                    vertSegs.x.push(inds[0]);
+                                    vertSegs.y.push(vy);
+                                }
+                                */
                             }
-                            zPolys[segment] = geometry.polyFromArr(segPolyPts);
-                            exts[z][4 * segment] = xmin;
-                            exts[z][4 * segment + 1] = xmax;
-                            exts[z][4 * segment + 2] = ymin;
-                            exts[z][4 * segment + 3] = ymax;
+
+                            // Check points with a "discrete" point-in-polygon method.  We can use point indices and
+                            // integer math
+                            //for (let yIdx = 0; yIdx < nGrid[1]; ++yIdx) {
+                            /*
+                            for (let yIdx = yIdxMin; yIdx <= yIdxMax; ++yIdx) {
+                                // check each x index at this y index
+                                //for (let xIdx = 0; xIdx < nGrid[0]; ++xIdx) {
+                                for (let xIdx = xIdxMin; xIdx <= xIdxMax; ++xIdx) {
+                                    let mIdx = xIdx + yIdx * nGrid[0] + zIdx * nGrid[0] * nGrid[1];
+                                    let tpt = toCoords([xIdx, yIdx, zIdx]);
+                                    let xin = false;
+
+                                    // ray casting
+                                    //srdbg(zIdx, 'check x', xIdxMin, '-', xIdx, 'at y', yIdx);
+                                    for (let j = xIdxMin; j <= xIdx; ++j) {
+
+                                        let vsIdx = vertSegs.x.indexOf(j);
+                                        // this x index is not part of a vertical line
+                                        if (vsIdx < 0) {
+                                            //srdbg('no verts at x', j);
+                                            continue;
+                                        }
+
+                                        let vsy = vertSegs.y[vsIdx];
+                                        let miny = Math.min.apply(null, vsy);
+                                        let maxy = Math.max.apply(null, vsy);
+
+                                        // point is entirely below or above the vertical line
+                                        //srdbg('check y', miny, '-', maxy);
+                                        if (miny > yIdx === maxy > yIdx) {
+                                            continue;
+                                        }
+
+                                        // point must be on the line, flip the parity
+                                        //srdbg(zIdx, j, 'flip');
+                                        xin = ! xin;
+                                    }
+                                    if (xin) {
+                                        //srdbg('in poly', tpt, 1);
+                                        //srdbg(tpt, 1);
+                                        ss[mIdx] = 1;
+                                        continue;
+                                    }
+                                    //srdbg('out poly', tpt, -1);
+                                    //srdbg(tpt, -1);
+                                }
+                            }
+*/
+                            //let spp = rasterize(segPolyPts);
+                            //zPolys[segment] = geometry.polyFromArr(spp);
+                            //zPolys[segment] = geometry.polyFromArr(segPolyPts);
+                            zPolys[segment] = geometry.polygon(segPolyPts);
                             lines[pl] = firstPoint;
                             pl++;
                         }
-                        //srdbg(z, exts[z], gxmin, gxmax, gymin, gymax);
-                        polys[z] = zPolys;
+                        polys[zp] = zPolys;
                     });
-                    info = rs4piService.addPolysForActiveROI(polys);
+                    //info = rs4piService.addPolysForActiveROI(polys);
                 //}
+                //srdbg(polys);
                 const tp1 = Date.now();
-                srdbg('done build polys', info, tp1 - tp0);
+                srdbg('done build polys', tp1 - tp0);
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
 
-                const ctr = geometry.pointFromArr(info.ctr);
-                let ns = 0;
-                const polyImpl =  {
-                    evaluateFunction: function (coords) {
-                        ++ns;
-                        const pt = geometry.pointFromArr(coords);
-                        const d = pt.dist(ctr);
-                        // closest zplane
-                        const zp = zPlanes[Math.floor((pt.z - info.bnds[4]) / info.dz)];
-                        for (segment = 0; segment < info.polys[zp].length; segment++) {
-                            if(info.polys[zp][segment].containsPoint(pt)) {
-                                return d;
-                            }
-                        }
-                        return -d;
-                    },
-                    getBounds: function () {
-                        return info.bnds;
-                    },
-                };
-                // test speed against solid box
-                const bx = vtk.Common.DataModel.vtkBox.newInstance();
-                bx.addBounds(info.bnds);
-
-                // build a regular grid - should be able to get this from the imported data
-                // directly
-                 // set with UI?  use zPlanes.length etc.?  can be large
-                const rez = [
-                    Math.min(64, info.nx),
-                    Math.min(64, info.ny),
-                    Math.min(64, info.nz)
-                ];
-                const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
-                    implicitFunction: polyImpl,
-                    modelBounds: info.bnds,
-                    sampleDimensions: rez
-                });
-                //srdbg('sample pts', sample.getOutputData().getPointData().getScalars().getData());
-                const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
-                cubes.setInputConnection(sample.getOutputPort());
-
-                // using imageData is no faster because we still have to figure out if a given point is in or
-                // out of the polygon.  But if we can read pre-built imageData from a file it will be fast enough
-                // Leaving the code for future reference
-                /*
-                // note that the origin of the image is the min corner, NOT the center!
-                const img = vtk.Common.DataModel.vtkImageData.newInstance({
+                let img = vtk.Common.DataModel.vtkImageData.newInstance({
                     dataDescription: vtk.Common.DataModel.vtkStructuredData.StructuredType.XYZ_GRID,
-                    //extent: rez,
-                    origin: [info.bnds[0], info.bnds[2], info.bnds[4]],
-                    spacing: [
-                        (info.bnds[1] - info.bnds[0]) / (rez[0] - 1),
-                        (info.bnds[3] - info.bnds[2]) / (rez[1] - 1),
-                        (info.bnds[5] - info.bnds[4]) / (rez[2] - 1),
-                    ]
+                    origin: [bnds[0], bnds[2], bnds[4]],
+                    spacing: gridSpc
                 });
-                img.setDimensions(rez);
-                //srdbg('img', img, 'img pd', img.getPointData());
-                const ti0 = Date.now();
-                var lastzp = '';
-                let s = Array(img.getNumberOfPoints()).fill(-1);
-                for (let i = 0; i < img.getNumberOfPoints(); ++i) {
-                    let pt = img.getPoint(i);
-                    const zp = zPlanes[Math.floor((pt[2] - info.bnds[4]) / info.dz)];
-                    const ext = exts[zp];
-                    const nsegs = ext.length / 4;
-                    for (let j = 0; j < nsegs; ++j) {
-                        let inext = pt[0] >= ext[4 * j] && pt[0] <= ext[4 * j + 1] && pt[1] >= ext[4 * j + 2] && pt[1] <= ext[4 * j + 3];
-                        if (inext) {
-                            s[i] = polyImpl.evaluateFunction(pt);  //1;
-                            break;
-                        }
-                    }
-                    s[i] = polyImpl.evaluateFunction(pt);
-                }
-                const ti1 = Date.now();
-                let nsp = s.filter(function (d) {
-                    return d >= 0;
-                }).length;
-                srdbg('done img', nsp, img.getNumberOfPoints(), 'evals', ti1 - ti0, 'total', (ti1 - ti0) / img.getNumberOfPoints(), 'per eval');
-                const ss = {
+                img.setDimensions(nGrid);
+                img.getPointData().setScalars(vtk.Common.Core.vtkDataArray.newInstance({
                     name: 'scalars',
                     dataType: 'Float32Array',
                     numberOfComponents: 1,
-                    values: s
+                    values: ss
+                }));
+
+                //srdbg('bnds', bnds, 'grid', nGrid, 'num', numGridPts, 'spc', gridSpc, 's', s, 'ss', ss);
+
+                //const ctr = geometry.pointFromArr(info.ctr);
+                const pctr = geometry.pointFromArr(ctr);
+                let ns = 0;
+
+                // used by the vtk sample function to decide which points in the volume are in or out
+                const polyImpl =  {
+                    evaluateFunction: function (coords) {
+                        ++ns;
+                        //const pt = geometry.pointFromArr(coords);
+                        //const d = pt.dist(pctr);
+                        const d = Math.hypot([ctr[0] - coords[0], ctr[1] - coords[1], ctr[2] - coords[2]]);
+                        // closest zplane
+                        //const zp = zPlanes[Math.floor((pt.z - bnds[4]) / dz)];
+                        const zp = zPlanes[Math.floor((coords[2] - bnds[4]) / dz)];
+                        for (segment = 0; segment < polys[zp].length; segment++) {
+                            if(polys[zp][segment].containsPoint(coords)) {
+                            //if(polys[zp][segment].containsPoint(pt)) {
+                                //srdbg('in full poly', coords, toInds(coords), 1);
+                                return 1;  //d;
+                            }
+                        }
+                        //srdbg('out full poly', coords, toInds(coords), -1);
+                        return -1;  //d;
+                    },
                 };
-                img.getPointData().setScalars(vtk.Common.Core.vtkDataArray.newInstance(ss));
+                // test speed against solid box
+                //const bx = vtk.Common.DataModel.vtkBox.newInstance();
+                //bx.addBounds(bnds);
+
+                const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
+                    implicitFunction: polyImpl,
+                    modelBounds: bnds,
+                    sampleDimensions: nGrid
+                });
+                //srdbg('sample pts', sample.getOutputData().getPointData().getScalars().getData());
+                //srdbg('img pts', img.getPointData().getScalars().getData());
                 const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
-                cubes.setInputData(img);
-                 */
+                cubes.setInputConnection(sample.getOutputPort());
+                //cubes.setInputData(img);
 
                 /*
                 var verts = new window.Uint32Array(numPts + 1);
@@ -2082,17 +2182,21 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 //actor.getProperty().setPointSize(2);
                 mapper.setInputData(pd);
                 actor.setMapper(mapper);
-                //fsRenderer.getRenderer().addActor(actor);
+                fsRenderer.getRenderer().addActor(actor);
 
                 var m3d = vtk.Rendering.Core.vtkMapper.newInstance();
                 a3d = vtk.Rendering.Core.vtkActor.newInstance({
                     mapper: m3d,
                 });
-                a3d.getProperty().setColor(0.6, 0.7, 0.9);
-                a3d.getProperty().setOpacity(0.50);
+                //a3d.getProperty().setColor(0.6, 0.7, 0.9);
+                a3d.getProperty().setColor(...roi.color.map(function (c) {
+                    return parseFloat(c) / 255.0;
+                }));
+                //a3d.getProperty().setOpacity(0.25);
+                //a3d.getProperty().setLighting(false);
                 //a3d.getProperty().setEdgeVisibility(true);
                 m3d.setInputConnection(cubes.getOutputPort());
-                fsRenderer.getRenderer().addActor(a3d);
+                //fsRenderer.getRenderer().addActor(a3d);
 
                 const t0 = Date.now();
                 reset();
