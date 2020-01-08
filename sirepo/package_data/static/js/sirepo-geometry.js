@@ -344,6 +344,7 @@ SIREPO.app.service('geometry', function(utilities) {
             throw new Error('A polygon requires at least 3 points (' + pts.length + ' provided)');
         }
 
+        /*
         let bounds = {};
         svc.basis.forEach(function (dim) {
             bounds[dim] = {};
@@ -353,40 +354,47 @@ SIREPO.app.service('geometry', function(utilities) {
             bounds[dim].min = Math.min.apply(null, d);
             bounds[dim].max = Math.max.apply(null, d);
         });
+        */
 
-        let boundaryRect = svc.rect(svc.point(bounds.x.min, bounds.y.min), svc.point(bounds.x.max, bounds.y.max));
+        //let boundaryRect = svc.rect(svc.point(bounds.x.min, bounds.y.min), svc.point(bounds.x.max, bounds.y.max));
 
         let sides = Array(pts.length);
         pts.forEach(function (pt, ptIdx) {
-            sides[ptIdx] = svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt);
+            //sides[ptIdx] = svc.lineSegment(pts[(ptIdx + 1) % pts.length], pt);
+            sides[ptIdx] = [pts[(ptIdx + 1) % pts.length], pt];
         });
 
         // static properties set at init
         let poly = {
-            bounds: bounds,
+            //bounds: bounds,
             points: pts,
-            boundaryRect: boundaryRect,
+            //boundaryRect: boundaryRect,
             sides: sides,
         };
 
+        // "ray casting" simplified
         poly.containsPoint = function(pt) {
-            // quick check for entirely in or entirely out
-            if (! boundaryRect.containsPoint(pt)) {
-                return false;
-            }
-            // "ray casting"
             // point outside the bounds - use same y as input point
-            let outPt = svc.point(-Number.MAX_VALUE, pt.y);
-            let raySeg = svc.lineSegment(pt, outPt);
-            let numCrossings = 0;
-            // ignore sides whose points are both on the same side of the input point
-            sides.filter(function (ls) {
-                return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
-            })
-                .forEach(function (ls) {
-                numCrossings += (! ! ls.intersection(raySeg));
-            });
-            return numCrossings % 2 === 1;
+            //let outPt = svc.point(-Number.MAX_VALUE, pt.y);
+            //let raySeg = svc.lineSegment(pt, outPt);
+            //srdbg('check pt', pt.str(), raySeg.str(), sides.filter(function (ls) {
+            //    return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
+            //}).length);
+            // count sides whose endpoints are above/below the input point and have least one endpoint to the left
+            // - implies a ray starting at -Infinity crosses that many sides
+            //let s = sides.filter(function (ls) {
+            //    return (ls[0][1] > pt[1] !== ls[1][1] > pt[1]) &&
+            //        (ls[0][0] < pt[0] || ls[1][0] < pt[0]);
+                //return (ls.p1.y > pt.y !== ls.p2.y > pt.y) &&
+                //    (ls.p1.x < pt.x || ls.p2.x < pt.x);
+            //});
+            //srdbg(s.length);
+            return sides.filter(function (ls) {
+                return (ls[0][1] > pt[1] !== ls[1][1] > pt[1]) &&
+                    (ls[0][0] < pt[0] || ls[1][0] < pt[0]);
+                //return (ls.p1.y > pt.y !== ls.p2.y > pt.y) &&
+                //    (ls.p1.x < pt.x || ls.p2.x < pt.x);
+            }).length  % 2 === 1;
         };
 
         // should start separating "dynamic" from "static" - if points are not expected to change there is
@@ -733,8 +741,18 @@ SIREPO.app.service('geometry', function(utilities) {
         return Math.abs(val2 - val1) < tol;
     }
 
+    function gtOutside(val1, val2, tolerance) {
+        const tol = tolerance || 0.0001;
+        return val1 - val2 > tol;
+    }
+
     function gtOrEqualWithin(val1, val2, tolerance) {
         return val1 > val2 || equalWithin(val1, val2, tolerance);
+    }
+
+    function ltOutside(val1, val2, tolerance) {
+        const tol = tolerance || 0.0001;
+        return val2 - val1 > tol;
     }
 
     function ltOrEqualWithin(val1, val2, tolerance) {
