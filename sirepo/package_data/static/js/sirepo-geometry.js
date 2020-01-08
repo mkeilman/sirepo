@@ -374,21 +374,8 @@ SIREPO.app.service('geometry', function(utilities) {
 
         // "ray casting" simplified
         poly.containsPoint = function(pt) {
-            // point outside the bounds - use same y as input point
-            //let outPt = svc.point(-Number.MAX_VALUE, pt.y);
-            //let raySeg = svc.lineSegment(pt, outPt);
-            //srdbg('check pt', pt.str(), raySeg.str(), sides.filter(function (ls) {
-            //    return ls.p1.y > outPt.y !== ls.p2.y > outPt.y;
-            //}).length);
             // count sides whose endpoints are above/below the input point and have least one endpoint to the left
             // - implies a ray starting at -Infinity crosses that many sides
-            //let s = sides.filter(function (ls) {
-            //    return (ls[0][1] > pt[1] !== ls[1][1] > pt[1]) &&
-            //        (ls[0][0] < pt[0] || ls[1][0] < pt[0]);
-                //return (ls.p1.y > pt.y !== ls.p2.y > pt.y) &&
-                //    (ls.p1.x < pt.x || ls.p2.x < pt.x);
-            //});
-            //srdbg(s.length);
             return sides.filter(function (ls) {
                 return (ls[0][1] > pt[1] !== ls[1][1] > pt[1]) &&
                     (ls[0][0] < pt[0] || ls[1][0] < pt[0]);
