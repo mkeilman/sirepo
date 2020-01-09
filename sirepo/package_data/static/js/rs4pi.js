@@ -23,6 +23,7 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
         s: 'x',
         c: 'y',
     };
+
     var dicomHistogram = {};
     var planeCoord = {};
     var roiPoints = {};
@@ -35,6 +36,8 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
     self.editMode = 'select';
     // for simulated dose calculations
     self.showDosePanels = false;
+
+    self.activeSegs = [];
 
     self.animationArgs = {
         dicomAnimation: ['dicomPlane', 'startTime'],
@@ -126,6 +129,22 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
         return dicomHistogram;
     };
 
+    self.getActiveSegments = function() {
+        return self.activeSegs;
+    };
+
+    self.getNumSegments = function() {
+        let roi = self.getActiveROIPoints();
+        let numSegs = 0;
+        if (! roi) {
+            return 0;
+        }
+        for (let z in roi.contour) {
+            numSegs = Math.max(numSegs, roi.contour[z].length);
+        }
+        return numSegs;
+    };
+
     self.getPlaneCoord = function(plane) {
         return planeCoord[plane];
     };
@@ -204,6 +223,7 @@ SIREPO.app.factory('rs4piService', function(appState, frameCache, requestSender,
 
     self.setActiveROI = function(roiNumber) {
         appState.models.dicomSeries.activeRoiNumber = roiNumber;
+        self.activeSegs = Array(self.getNumSegments()).fill(true);
         $rootScope.$broadcast('roiActivated');
     };
 
@@ -1771,12 +1791,18 @@ SIREPO.app.directive('roiTable', function(appState, panelState, rs4piService) {
                   '<td style="padding-left: 1em">{{ roi.name }}</td>',
                   '<td><div style="border: 1px solid #333; background-color: {{ d3Color(roi.color) }}">&nbsp;</div></td>',
                 '</tr>',
+                '<tr data-ng-if="numSegs.length > 1"><td>Segments</td></tr>',
+                '<tr data-ng-if="numSegs.length > 1">',
+                    '<td data-ng-repeat="s in numSegs">{{s + 1}} <input type="checkbox" checked data-ng-model="rs4piService.activeSegs[s]" data-ng-click="activateSeg(s)"></td>',
+                '/<tr>',
               '</tbody>',
             '</table>',
         ].join(''),
         controller: function($scope) {
             $scope.rs4piService = rs4piService;
             $scope.roiList = null;
+
+            $scope.numSegs = [];
 
             function loadROIPoints() {
                 $scope.roiList = [];
@@ -1798,6 +1824,11 @@ SIREPO.app.directive('roiTable', function(appState, panelState, rs4piService) {
                 appState.saveChanges('dicomSeries');
             };
 
+            $scope.activateSeg = function(s) {
+                $scope.$emit('segmentActivated', {seg: s, val: ! rs4piService.getActiveSegments()[s]});
+                //srdbg(s, rs4piService.getActiveSegments());
+            };
+
             $scope.d3Color = function(c) {
                 return window.d3 ? d3.rgb(c[0], c[1], c[2]) : '#000';
             };
@@ -1815,6 +1846,11 @@ SIREPO.app.directive('roiTable', function(appState, panelState, rs4piService) {
             };
 
             $scope.showROI = function(roi) {
+                const n = rs4piService.getNumSegments();
+                $scope.numSegs = Array(n);
+                for (let i = 0; i < n; ++i) {
+                    $scope.numSegs[i] = i;
+                }
                 return roi.isVisible || $scope.isActive(roi) || rs4piService.isEditMode('draw');
             };
 
@@ -1960,9 +1996,9 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
 
                 // don't go beyond maximal grid (yet?)
                 nGrid = [
-                    Math.min(32, nGrid[0]),
-                    Math.min(32, nGrid[1]),
-                    Math.min(32, nGrid[2])
+                    Math.min(128, nGrid[0]),
+                    Math.min(128, nGrid[1]),
+                    Math.min(128, nGrid[2])
                 ];
                 srdbg('final grid', nGrid);
                 const numGridPts = nGrid[0] * nGrid[1] * nGrid[2];
@@ -2181,18 +2217,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 //bx.addBounds(bnds);
                 //srdbg('box', bx, bx.getMTime());
 
-                //const cmps = vtk.Common.DataModel.vtkImplicitBoolean.newInstance({
-                //    operation: 'Union',
-                //    functions: smps
-                //});
-
-                const sample = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
-                    implicitFunction: polyImpl,
-                    modelBounds: bnds,
-                    sampleDimensions: nGrid
-                });
-
-                srdbg('sampling', maxSegs, 'segments');
+                //srdbg('sampling', maxSegs, 'segments');
                 for (let i = 0; i < maxSegs; ++i) {
                     let s = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
                         implicitFunction: segmentImpl(i),
@@ -2217,22 +2242,9 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 }
 
 
-                //srdbg('sample pts', sample.getOutputData().getPointData().getScalars().getData());
                 //srdbg('img pts', img.getPointData().getScalars().getData());
                 //const cubes = vtk.Filters.General.vtkImageMarchingCubes.newInstance();
-                //cubes.setInputConnection(sample.getOutputPort());
                 //cubes.setInputData(img);
-
-
-
-                /*
-                var verts = new window.Uint32Array(numPts + 1);
-                pd.getVerts().setData(verts, 1);
-                verts[0] = numPts;
-                for (var i = 0; i < numPts; i++) {
-                    verts[i + 1] = i;
-                }
-                */
 
                 var mapper = vtk.Rendering.Core.vtkMapper.newInstance();
                 actor = vtk.Rendering.Core.vtkActor.newInstance({
@@ -2265,7 +2277,6 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 const t0 = Date.now();
                 reset();
                 const t1 = Date.now();
-                //srdbg('box', bx, bx.getMTime());
                 srdbg('done input cubes', ns, 'evals', t1 - t0, 'total', (t1 - t0) / ns, 'per eval');
             }
 
@@ -2284,6 +2295,12 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 $($element).off();
                 fsRenderer.getInteractor().unbindEvents();
                 fsRenderer.delete();
+            });
+
+            $scope.$on('segmentActivated', function (evt, args) {
+                let a = a3ds[args.seg]
+                a.getProperty().setOpacity(args.val ? 1.0 : 0.1);
+                fsRenderer.getRenderWindow().render();
             });
 
             $scope.$on('roiPointsLoaded', function() {
