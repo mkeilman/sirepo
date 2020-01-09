@@ -1943,6 +1943,10 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 if (! roi) {
                     return;
                 }
+
+                let aColor = roi.color.map(function (c) {
+                    return parseFloat(c) / 255.0;
+                });
                 var numPts = 0;
                 var numLines = 0;
                 var z, segment, points;
@@ -1991,7 +1995,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 const dz = Math.abs((parseFloat(zPlanes[zPlanes.length - 1]) - parseFloat(zPlanes[0])) / (zPlanes.length - 1));
                 //srdbg('zplanes', zPlanes);
 
-                let info = rs4piService.getActiveROIPolyInfo();
+                //let info = rs4piService.getActiveROIPolyInfo();
                 const tp0 = Date.now();
 
                 // don't go beyond maximal grid (yet?)
@@ -2007,14 +2011,6 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                     Math.abs((bnds[3] - bnds[2])) / (nGrid[1] - 1),
                     Math.abs((bnds[5] - bnds[4])) / (nGrid[2] - 1),
                 ];
-
-                function rasterize(coords) {
-                    let cc = Array(coords.length);
-                    coords.forEach(function (c, cIdx) {
-                        cc[cIdx] = toCoords(toInds(c));
-                    });
-                    return cc;
-                }
 
                 function toCoords(inds) {
                     return inds.map(toCoord);
@@ -2032,7 +2028,17 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                     return Math.floor((cVal - bnds[2 * cIdx]) / gridSpc[cIdx]);
                 }
 
-                let ss = Array(numGridPts).fill(-1);
+                //let ss = Array(numGridPts).fill(-1);
+                let segBnds = Array(maxSegs);
+                let segGrid = Array(maxSegs);
+                let segCtr = Array(maxSegs);
+                for (let i = 0; i < maxSegs; ++i) {
+                    segBnds[i] = [];
+                    for (let j = 0; j < 6; ++j) {
+                        segBnds[i].push((1 - 2 * (j % 2)) * Number.MAX_VALUE);
+                    }
+                }
+                //let imgScalars = Array(maxSegs);
 
                 //if (! info) {
                     let polys = {};
@@ -2040,11 +2046,13 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
 
                         let z = parseFloat(zp);
                         // either get closest *existing* z plane or interpolate polygon between planes
-                        let zIdx = Math.floor((z - bnds[4]) / gridSpc[2]);
+                        //let zIdx = Math.floor((z - bnds[4]) / gridSpc[2]);
                         //let zIdx = Math.floor((z - bnds[4]) / dz);
                         let nSegs = roi.contour[zp].length;
                         let zPolys = Array(nSegs);
                         for (segment = 0; segment < nSegs; segment++) {
+                            segBnds[segment][4] = Math.min(segBnds[segment][4], z);
+                            segBnds[segment][5] = Math.max(segBnds[segment][5], z);
                             var cPoints = roi.contour[zp][segment];
                             //let xIdxMin = Number.MAX_SAFE_INTEGER;
                             //let xIdxMax = Number.MIN_SAFE_INTEGER;
@@ -2059,16 +2067,14 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                                 points[pi] = cPoints[i];
                                 points[pi + 1] = cPoints[i + 1];
                                 points[pi + 2] = z;
-                                //let pp = rasterize([[cPoints[i], cPoints[i + 1], z]]);
-                                //srdbg('p', [cPoints[i], cPoints[i], z], 'pp', pp);
-                                //points[pi] = pp[0][0];
-                                //points[pi + 1] = pp[0][1];
-                                //points[pi + 2] = pp[0][2];
                                 segPolyPts[i / 2] = [cPoints[i], cPoints[i + 1], z];
-                                //segPolyPts[i / 2] = [pp[0][0], pp[0][1], pp[0][2]];
                                 lines[pl] = pi / 3;
                                 pl++;
                                 pi += 3;
+                                for (let j = 0; j < 2; ++j) {
+                                    segBnds[segment][2 * j] = Math.min(segBnds[segment][2 * j], cPoints[i + j]);
+                                    segBnds[segment][2 * j + 1] = Math.max(segBnds[segment][2 * j + 1], cPoints[i + j]);
+                                }
 
                                 /*
                                 let inds = toInds([cPoints[i], cPoints[i + 1], z]);
@@ -2091,6 +2097,8 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                                 }
                                 */
                             }
+                            //srdbg('seg bnds now', segment, segBnds.slice());
+                            //imgScalars[segment] = Array((xIdxMax - xIdxMin) * (yIdxMax - yIdxMin) * zPlanes.length);
 
                             // Check points with a "discrete" point-in-polygon method.  We can use point indices and
                             // integer math.  I don't know if this is actually faster
@@ -2140,9 +2148,6 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                                 }
                             }
 */
-                            //let spp = rasterize(segPolyPts);
-                            //zPolys[segment] = geometry.polyFromArr(spp);
-                            //zPolys[segment] = geometry.polyFromArr(segPolyPts);
                             zPolys[segment] = geometry.polygon(segPolyPts);
                             lines[pl] = firstPoint;
                             pl++;
@@ -2152,11 +2157,36 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                     //info = rs4piService.addPolysForActiveROI(polys);
                 //}
                 //srdbg(polys);
+                srdbg('segBnds', segBnds);
                 srdbg('done build polys', Date.now() - tp0);
+
+                // reduce the space for marching cubes to the bounds of each segment
+                for (let i = 0; i < maxSegs; ++i) {
+                    let b = segBnds[i];
+                    // add a grid spacing on each side to close off the volume - or
+                    // not, it does slow things down and may not be necessary
+                    //b[0] -= gridSpc[0];  b[1] += gridSpc[0];
+                    //b[2] -= gridSpc[1];  b[3] += gridSpc[1];
+                    //b[4] -= gridSpc[2];  b[5] += gridSpc[2];
+                    // must be at least 2 grid points in each direction
+                    segGrid[i] = Array(3);
+                    segCtr[i] = Array(3);
+                    for (let j = 0; j < 3; ++j) {
+                        //segGrid[i][j] = 2 + Math.floor(Math.abs((b[2 * j + 1] - b[2 * j])) / gridSpc[0]),
+                        segGrid[i][j] = Math.max(
+                            2,
+                            Math.floor(Math.abs((b[2 * j + 1] - b[2 * j])) / gridSpc[j])
+                        );
+                        segCtr[i][j] = (b[2 * j] + b[2 * j + 1]) / 2.0;
+                    }
+                }
+                srdbg('seg grid', segGrid, segCtr);
+
                 var pd = vtk.Common.DataModel.vtkPolyData.newInstance();
                 pd.getPoints().setData(points, 3);
                 pd.getLines().setData(lines);
 
+                /*
                 let img = vtk.Common.DataModel.vtkImageData.newInstance({
                     dataDescription: vtk.Common.DataModel.vtkStructuredData.StructuredType.XYZ_GRID,
                     origin: [bnds[0], bnds[2], bnds[4]],
@@ -2169,34 +2199,11 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                     numberOfComponents: 1,
                     values: ss
                 }));
+                */
 
-                //const ctr = geometry.pointFromArr(info.ctr);
-                //const pctr = geometry.pointFromArr(ctr);
                 let ns = 0;
 
                 // used by the vtk sample function to decide which points in the volume are in or out
-                const polyImpl =  {
-                    evaluateFunction: function (coords) {
-                        ++ns;
-                        //const pt = geometry.pointFromArr(coords);
-                        //const d = pt.dist(pctr);
-                        const d = Math.hypot(...[ctr[0] - coords[0], ctr[1] - coords[1], ctr[2] - coords[2]]);
-                        // closest zplane
-                        //const zp = zPlanes[Math.floor((pt.z - bnds[4]) / dz)];
-                        const zp = zPlanes[Math.floor((coords[2] - bnds[4]) / dz)];
-                        for (segment = 0; segment < polys[zp].length; segment++) {
-                            if(polys[zp][segment].containsPoint(coords)) {
-                            //if(polys[zp][segment].containsPoint(pt)) {
-                                //srdbg('in full poly', coords, toInds(coords), 1);
-                                return d;
-                            }
-                        }
-                        //srdbg('out full poly', coords, toInds(coords), -1);
-                        return -d;
-                    },
-                };
-
-
                 function segmentImpl(seg) {
                     return {
                         evaluateFunction: function (coords) {
@@ -2204,7 +2211,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                             const d = Math.hypot(...[ctr[0] - coords[0], ctr[1] - coords[1], ctr[2] - coords[2]]);
                             // closest zplane
                             const zp = zPlanes[Math.floor((coords[2] - bnds[4]) / dz)];
-                            if (! polys[zp][seg]) {
+                            if (! polys[zp] || ! polys[zp][seg]) {
                                 return -d;
                             }
                             return polys[zp][seg].containsPoint(coords) ? d : -d;
@@ -2215,28 +2222,22 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
                 // test speed against solid box
                 //const bx = vtk.Common.DataModel.vtkBox.newInstance();
                 //bx.addBounds(bnds);
-                //srdbg('box', bx, bx.getMTime());
+                //srdbg('box', bx);
 
-                //srdbg('sampling', maxSegs, 'segments');
                 for (let i = 0; i < maxSegs; ++i) {
                     let s = vtk.Imaging.Hybrid.vtkSampleFunction.newInstance({
                         implicitFunction: segmentImpl(i),
-                        modelBounds: bnds,
-                        sampleDimensions: nGrid
+                        modelBounds: segBnds[i],
+                        sampleDimensions: segGrid[i]
                     });
-                    let c = vtk.Filters.General.vtkImageMarchingCubes.newInstance({ contourValue: 0 });
+                    let c = vtk.Filters.General.vtkImageMarchingCubes.newInstance({ contourValue: 0.0 });
                     c.setInputConnection(s.getOutputPort());
                     let m = vtk.Rendering.Core.vtkMapper.newInstance();
                     let a = vtk.Rendering.Core.vtkActor.newInstance({
                         mapper: m,
                     });
-                    a.getProperty().setColor(...roi.color.map(function (c) {
-                        return parseFloat(c) / 255.0;
-                    }));
-                    //a.getProperty().setOpacity(0.25 * (i + 1));
+                    a.getProperty().setColor(...aColor);
                     a3ds.push(a);
-                    //a.getProperty().setLighting(false);
-                    //a.getProperty().setEdgeVisibility(true);
                     m.setInputConnection(c.getOutputPort());
                     fsRenderer.getRenderer().addActor(a);
                 }
@@ -2298,7 +2299,7 @@ SIREPO.app.directive('roi3d', function(appState, geometry, panelState, rs4piServ
             });
 
             $scope.$on('segmentActivated', function (evt, args) {
-                let a = a3ds[args.seg]
+                let a = a3ds[args.seg];
                 a.getProperty().setOpacity(args.val ? 1.0 : 0.1);
                 fsRenderer.getRenderWindow().render();
             });
